@@ -10,11 +10,8 @@ author:
 ```{r}
 #| label: setup
 #| include: false
-source("R/load_data.R")
-source("R/splits.R")
-source("R/pairs.R")
-
-handwriting <- load_handwriting()
+source("R/splitData.R")
+source("R/prepData.R")
 ```
 
 {{< include sections/_00-introduction.qmd >}}
