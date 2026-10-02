@@ -1,0 +1,15 @@
+# Trained model weights: large binaries that change every run
+models/*
+!models/.gitkeep
+
+# Quarto build output (published to the gh-pages branch, never committed here)
+/.quarto/
+/_site/
+
+# R / RStudio
+.Rhistory
+.RData
+.Ruserdata
+.Rproj.user/
+
+**/*.quarto_ipynb

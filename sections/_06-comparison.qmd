@@ -1,0 +1,3 @@
+## Comparing the CNN and Siamese results
+
+<!-- Task 6: which digits carry more writer information; how session changes affect performance. -->

@@ -1,0 +1,3 @@
+## Exploratory data analysis
+
+<!-- Task 1: examples across people, digits and sessions; sources of variation; limitations of the simulated data. -->

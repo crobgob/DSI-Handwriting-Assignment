@@ -1,0 +1,3 @@
+## Hyperparameter optimisation
+
+<!-- Task 5: limited search for the CNN and/or Siamese model; sensitivity of the evaluation measures. -->

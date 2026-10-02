@@ -1,0 +1,3 @@
+## Writer verification with a Siamese network
+
+<!-- Task 3: contrastive or triplet loss; how training examples are constructed; matching performance. -->

@@ -1,0 +1,3 @@
+## Writer identification with a CNN
+
+<!-- Task 2: build and evaluate a CNN with writer ID as the response; overall and per-digit performance; what the measures mean in real-world terms. -->

@@ -1,0 +1,19 @@
+project:
+  type: website
+  output-dir: _site
+  # Only the report is a page; README.md, ai-log.md and sections/_*.qmd are not.
+  render:
+    - index.qmd
+
+website:
+  title: "STA5073Z Assignment 2"
+
+execute:
+  # Re-execute a document only when its source changes; results live in _freeze/.
+  freeze: auto
+
+format:
+  html:
+    toc: true
+    number-sections: true
+    code-fold: true
