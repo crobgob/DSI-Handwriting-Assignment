@@ -70,10 +70,10 @@ Set a seed with `keras3::set_random_seed()` at the top of each modelling chunk.
 
 ## Publishing
 
-Nobody publishes by hand. Every push to `master` runs
-`.github/workflows/publish.yml`, which renders from `_freeze/` and pushes the
-site to the `gh-pages` branch.
+From an up-to-date `master`, after merging:
 
-The runner has no R, so it publishes whatever is in `_freeze/`. If a PR changes
-`sections/` or `R/` without a fresh `quarto render index.qmd`, the site shows
-the old results. If `index.qmd` itself changed without one, the workflow fails.
+```bash
+quarto publish gh-pages
+```
+
+This renders from `_freeze/` and pushes the site to the `gh-pages` branch.
