@@ -18,7 +18,7 @@ handwriting <- load_handwriting()
 ```
 
 {{< include sections/_00-introduction.qmd >}}
-Lorum Ipsum
+
 {{< include sections/_01-eda.qmd >}}
 
 {{< include sections/_04-split-strategy.qmd >}}
