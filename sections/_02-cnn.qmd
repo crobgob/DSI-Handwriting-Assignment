@@ -7,7 +7,7 @@
 
 library(keras3)
 use_backend("tensorflow")
-set_random_seed(2026)
+set_random_seed(67)
 ```
 
 ```{r}
@@ -88,11 +88,11 @@ model %>% compile(
 
 history <- model %>% fit(
   x_train, y_train,
-  epochs = 200, batch_size = 64,
+  epochs = 40, batch_size = 8192,
   validation_data = list(x_val, y_val), shuffle = TRUE,
   verbose = 0,
   callbacks = list(
-    callback_early_stopping(monitor = "val_loss", patience = 8,
+    callback_early_stopping(monitor = "val_loss", patience = 10,
                             restore_best_weights = TRUE)
   )
 )
