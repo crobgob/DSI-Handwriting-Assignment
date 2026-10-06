@@ -11,8 +11,8 @@ from handwritten digits with a CNN and a Siamese network. The brief is
 
    | Tool       | Version |
    |------------|---------|
-   | R          | 4.5.2   |
-   | Quarto     | 1.8.25  |
+   | R          | 4.6.1   |
+   | Quarto     | 1.10.18 |
    | Python     | TBD     |
    | TensorFlow | TBD     |
 
