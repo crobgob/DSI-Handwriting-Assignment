@@ -1,3 +1,171 @@
 ## Writer identification with a CNN
 
 <!-- Task 2: build and evaluate a CNN with writer ID as the response; overall and per-digit performance; what the measures mean in real-world terms. -->
+
+```{r}
+#| label: cnn-setup
+
+library(keras3)
+use_backend("tensorflow")
+set_random_seed(2026) # same starting weights and dropout pattern each run
+```
+
+```{r}
+#| label: cnn-split
+
+# PRELIMINARY split, used in this section only until the group agrees a strategy.
+# Within each person x digit x session (50 replicates): 30 train, 15 validation, 5 test
+set.seed(2026)
+cnn_split <- handwriting$metadata %>%
+  group_by(person_id, digit, session) %>%
+  mutate(set = sample(rep(c("train", "val", "test"), times = c(30, 15, 5)))) %>%
+  ungroup()
+
+# image_id is the position of the image along the first dimension of the array
+train_id <- cnn_split$image_id[cnn_split$set == "train"] # 15 000 images
+val_id <- cnn_split$image_id[cnn_split$set == "val"] # 7 500 images
+test_id <- cnn_split$image_id[cnn_split$set == "test"] # 2 500 images
+```
+
+```{r}
+#| label: cnn-preprocess-images
+
+# Scale pixel values to [0,1], keeping all four dimensions (n x 28 x 28 x 1)
+x <- handwriting$images / 255
+x_train <- x[train_id, , , , drop = FALSE]
+x_val <- x[val_id, , , , drop = FALSE]
+x_test <- x[test_id, , , , drop = FALSE]
+```
+
+```{r}
+#| label: cnn-preprocess-target
+
+# One column per writer; to_categorical needs classes numbered from 0
+y_train <- to_categorical(handwriting$metadata$person_id[train_id] - 1, 20)
+y_val <- to_categorical(handwriting$metadata$person_id[val_id] - 1, 20)
+y_test_original <- handwriting$metadata$person_id[test_id]
+y_test <- to_categorical(y_test_original - 1, 20)
+
+digit_test <- handwriting$metadata$digit[test_id] # for comparing performance by digit
+```
+
+```{r}
+#| label: cnn-define
+
+input <- layer_input(shape = c(28, 28, 1))
+
+output <- input %>%
+  layer_conv_2d(filters = 16, kernel_size = c(3,3), padding = "same", activation = "relu") %>%
+  layer_conv_2d(filters = 16, kernel_size = c(3,3), padding = "same", activation = "relu") %>%
+  layer_max_pooling_2d(pool_size = c(2, 2)) %>%
+  layer_dropout(rate = 0.20) %>%
+  layer_conv_2d(filters = 32, kernel_size = c(3,3), padding = "same", activation = "relu") %>%
+  layer_conv_2d(filters = 32, kernel_size = c(3,3), padding = "same", activation = "relu") %>%
+  layer_max_pooling_2d(pool_size = c(2, 2)) %>%
+  layer_dropout(rate = 0.20) %>%
+  layer_conv_2d(filters = 64, kernel_size = c(3,3), padding = "same", activation = "relu") %>%
+  layer_global_average_pooling_2d() %>%
+  layer_dropout(rate = 0.30) %>%
+  layer_dense(units = 64, activation = "relu") %>%
+  layer_dense(units = 20, activation = "softmax")
+
+model <- keras_model(inputs = input, outputs = output)
+```
+
+```{r}
+#| label: cnn-summary
+
+summary(model)
+```
+
+```{r}
+#| label: cnn-compile
+
+model %>% compile(
+  loss = 'categorical_crossentropy',
+  optimizer = optimizer_adam(learning_rate = 0.001),
+  metrics = c('accuracy'),
+)
+```
+
+```{r}
+#| label: cnn-fit
+
+# validation_split cannot be used here: it takes the last rows, which are all from the last few writers
+history <- model %>% fit(
+  x_train, y_train,
+  epochs = 40, batch_size = 64,
+  validation_data = list(x_val, y_val), shuffle = TRUE
+)
+```
+
+```{r}
+#| label: cnn-history
+
+plot(history)
+```
+
+```{r}
+#| label: cnn-evaluate
+
+model %>% evaluate(x_test, y_test)
+```
+
+```{r}
+#| label: cnn-predict
+
+# op_argmax counts from 1, so the predicted column number is the person_id
+y_test_hat <- model %>% predict(x_test) %>% op_argmax(axis = 2) %>% as.numeric()
+```
+
+```{r}
+#| label: cnn-confusion
+
+table(y_test_original, y_test_hat)
+```
+
+```{r}
+#| label: cnn-by-digit
+
+tibble(digit = digit_test, correct = y_test_original == y_test_hat) %>%
+  group_by(digit) %>%
+  summarise(n = n(), accuracy = mean(correct))
+```
+
+```{r}
+#| label: fig-cnn-errors
+#| fig-cap: "Three test images that the CNN assigned to the wrong writer, taken from the digit with the most errors."
+#| fig-width: 6
+#| fig-height: 2.5
+
+# Test images assigned to the wrong writer
+errors <- tibble(image_id = test_id, digit = digit_test,
+                 person_id = y_test_original, predicted = y_test_hat) %>%
+  filter(person_id != predicted)
+
+# Digit with the most errors, and the first three of its misclassified images
+worst_digit <- errors %>% count(digit, sort = TRUE) %>% slice(1) %>% pull(digit)
+examples <- errors %>%
+  filter(digit == worst_digit) %>%
+  slice(1:3) %>%
+  mutate(label = paste0("Digit ", digit, ": person ", person_id, "\npredicted as person ", predicted))
+
+# Create a data frame from array data for plotting
+samples <- expand.grid(image_id = examples$image_id, row = 1:28, column = 1:28) %>%
+  left_join(examples, by = "image_id")
+samples$value <- as.vector(handwriting$images[examples$image_id,,,]) # add pixel scale values
+
+samples %>%
+  ggplot(aes(x = column, y = row, fill = value)) +
+  geom_raster() +
+  scale_fill_gradient(low = "white", high = "black") + # colour pixels by scale value
+  scale_y_reverse() + # flip to correct orientation
+  coord_equal(expand = FALSE) + # same height and width of pixels
+  facet_wrap(~ label, nrow = 1) + # one panel per misclassified image
+  theme_void() +
+  theme(legend.position = "none", # remove legend
+        panel.border = element_rect(color = "grey", fill = NA, linewidth = 0.5), # outline each of the drawings
+        strip.background = element_rect(fill = "lightgrey", linewidth = 0.5), # boxes for panel labels
+        strip.text = element_text(size = 10, face = "bold", margin = margin(b = 5, t = 5)) # panel labels
+        )
+```
