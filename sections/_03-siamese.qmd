@@ -1,3 +1,267 @@
 ## Writer verification with a Siamese network
 
 <!-- Task 3: contrastive or triplet loss; how training examples are constructed; matching performance. -->
+### Build a Siamese network that estimates whether two images were written by the same person. Use contrastive loss or triplet loss. Explain how you construct training examples and evaluate matching performance.
+
+```{r readdata}
+data <- readRDS("data/handwriting.rds")
+#head(data$metadata)
+
+library(keras3)
+use_backend("tensorflow")
+
+# images is an integer array with values from 0 (background) to 255 (ink).
+
+# below = x in e.g.
+x <- data$images / 255 # scale the pixels to 0-1
+#dim(data$images) # 25000 x 28 x 28 x 1 - 1 = number of image channels (greyscale = 1)
+# therefore: 25,000 images, 28 x 28 pixels, 1 image channel
+#range(x) # 0 1
+
+# below = 'labels' in e.g.
+y_person <- data$metadata$person_id - 1L # subtracts 1 from every value in ID
+#range(y_person) # 0 19 = 20 people
+
+set.seed(25)
+```
+
+We want to evaluate whether two images were written by the same writer. Therefore,
+we must control for the digit identity i.e., construct pairs using the same digit
+to force the NN to learn the writing style (the writer identity).
+(Positive pair: same writer + same digit; Negative pair: diff writer + same digit).
+
+
+
+```{r makepairs}
+
+# need pairs of image indices to compare
+# use person_id to decide if positive / negative pair
+
+make_pairs <- function(ids, # indices of images it can use
+                       n, # how many pairs to create
+                       metadata){ # metadata -> writer ID + digit ID for each image
+  
+  # a: choose the first image in every pair - randomly selects n IDs
+  a <- sample(ids, n, replace = TRUE) # w/replacement = can make as many pairs as we want
+  
+  # b: create the second image in every pair
+  b <- vapply(a, function(i){
+    
+    # randomly decide if pair is from same writer or not
+    same <- runif(1) < 0.5 
+    
+    # finds pool of images with the same digit
+    pool <- ids[metadata$digit[ids] == metadata$digit[i]]
+    
+    if(same){ # if the same writer, pool must be same writer + same digit (pos pair)
+      
+      # 'from all images of digit i, keep only the ones written by the same writer'
+      # CHANGE TO Y_PERSON OR NOT?
+      pool <- pool[metadata$person_id[pool] == metadata$person_id[i]]# who wrote image i
+      
+    } else { # if not the same writer, pool must be diff writer + same digit (neg pair)
+      
+      pool <- pool[metadata$person_id[pool] != metadata$person_id[i]]
+      
+    }
+    sample(setdiff(pool, i), 1) # doesn't allow pairing with itself
+    
+  }, integer(1)) # each iteration must return 1 integer
+  
+  cbind(a,b)
+}
+
+```
+
+From make_pairs() (which creates the two image indices; pair-index matrix), we 
+must extract the actual images + the target y (0 if diff writer, 1 if same), 
+using make_batch().
+
+```{r makebatch}
+
+make_batch <- function(p, # pairs created by make_pairs()
+                       images = x, # actual images
+                       class_labels = y_person) { # class assoc with images
+  
+  y <- matrix(as.integer( # true = 1, false = 0
+    class_labels[p[, 1]] # labels of first col of p-i matrix
+                         == class_labels[p[, 2]]), # label of second col
+              ncol = 1) # matrix of 1 col for formatting for neural network
+  
+  # return the actual images + the target
+  list(
+    left = images[p[, 1], , , , drop = FALSE], # left side of Siamese
+    right = images[p[, 2], , , , drop = FALSE], # right side of Siamese
+    y = y
+  )
+}
+
+```
+
+Training/validation/test split has to be done by writer, so that we can test the
+generalisability of the model by evaluating its performance on writers it truly 
+hasn't seen before.
+Limitation - only 20 writers.
+
+We decided on a 60/30/10 split?
+
+
+```{r datasplit}
+# get the writer IDs belonging in each split
+set.seed(25)
+writers <- unique(data$metadata$person_id - 1L)
+train_writers <- sample(writers, 0.6*length(writers))
+
+rest_writers <- setdiff(writers, train_writers)
+set.seed(25)
+valid_writers <- sample(rest_writers, 0.75*length(rest_writers))
+test_writers <- setdiff(rest_writers, valid_writers)
+
+# now extract the image IDs belonging to each split
+train_ids <- which(data$metadata$person_id %in% train_writers)
+valid_ids <- which(data$metadata$person_id %in% valid_writers)
+test_ids <- which(data$metadata$person_id %in% test_writers)
+
+# now make the image index pairs in each split
+train_pairs <- make_pairs(train_ids, length(train_ids), data$metadata)
+valid_pairs <- make_pairs(valid_ids, length(valid_ids), data$metadata)
+test_pairs <- make_pairs(test_ids, length(test_ids), data$metadata)
+
+# for each pair, extract the image + 0/1
+train <- make_batch(train_pairs)
+valid <- make_batch(valid_pairs)
+test  <- make_batch(test_pairs)
+```
+
+Build the shared encoder:
+```{r encoderbuild}
+
+image <- layer_input(shape = c(28, 28, 1)) # each image = 28x28, 1 image channel
+
+z <- image |>
+  layer_conv_2d(16, 3, activation = "relu") |> # learns useful features (shapes, strokes)
+  layer_max_pooling_2d(2) |> # makes feature maps smaller while keeping important info
+  layer_conv_2d(32, 3, activation = "relu") |>
+  layer_global_average_pooling_2d() |> # converts feature maps -> single vector of numbers
+  layer_dense(16) # converts to 16-no embedding representing the handwriting style
+
+encoder <- keras_model(image, z)
+# NOTHING HAS BEEN CHANGED FOR THE ABOVE FROM THE NOTES -- CHANGE IF WANTED
+```
+
+Build the Siamese model:
+```{r siamesebuild}
+# a & b = describes pair of images supplied to model
+a <- layer_input(shape = c(28, 28, 1))
+b <- layer_input(shape = c(28, 28, 1))
+
+# encoders produce the embeddings for a & b
+# distance calculates the Euclidean distance between their embeddings 
+distance <- list(encoder(a), encoder(b)) |>
+  layer_lambda(f = function(z) {
+    op_sqrt(op_sum(op_square(z[[1]] - z[[2]]), 
+                   axis = 2, # sum over embedding dimension
+                   keepdims = TRUE) + 
+              1e-7) # makes sure it's not 0
+  })
+
+# distance = model output
+model <- keras_model(list(a, b), distance)
+```
+
+Choice of loss - contrastive loss. 
+(Since this function works with pairs of images, which is how our data is already 
+organised, this is a natural/simple choice for evaluating pairwise whether the 
+digit was computed by the same or different writer) -- change.
+
+Loss func = 1 for same-writer pair, 0 for diff-writer pair.
+("The loss makes same-writer images move closer together and different-writer images move at least 1 unit apart.")
+
+```{r constrastiveloss}
+
+contrastive_loss <- function(y, d) {
+  op_mean( # finds avg loss across all pairs in a batch
+    y * op_square(d) + # squares each pair's distance - for same-writer pairs, penalises a large distance
+            (1 - y) * op_square(op_maximum(1 - d, 0))) # for diff writer pairs, penalises only if distance is < 1: if dist >=1, penalty is 0
+}
+
+```
+
+Compile model: (only train + validation data)
+```{r compile}
+model |> compile(
+  optimizer = optimizer_adam(1e-3),
+  loss = contrastive_loss
+)
+
+model |> fit(
+  list(train$left, train$right), train$y,
+  validation_data = list(
+    list(valid$left, valid$right), valid$y
+  ),
+  epochs = 5,
+  batch_size = 64
+)
+```
+
+Now we must select a threshold at which below = same and above = different.
+To do this, we look at validation pairs and compute the accuracy "for actual same pairs and actual different pairs, then average those two rates. The balanced accuracy metric gives both kinds of pair equal weight." [notes]
+
+```{r valid_dist}
+
+valid_distance <- as.numeric(predict(model, list(valid$left, valid$right)))
+valid_same <- as.logical(valid$y[, 1])
+
+balanced_accuracy_at <- function(cut) {
+  predicts_same <- valid_distance < cut
+  same_rate <- mean(predicts_same[valid_same])
+  different_rate <- mean(!predicts_same[!valid_same])
+  (same_rate + different_rate) / 2
+}
+
+example_thresholds <- unique(as.numeric(
+  quantile(valid_distance, c(.25, .5, .75))
+))
+data.frame(
+  threshold = example_thresholds,
+  balanced_accuracy = vapply(example_thresholds, balanced_accuracy_at, numeric(1))
+)
+
+threshold_candidates <- sort(unique(valid_distance))
+threshold_scores <- vapply(threshold_candidates, balanced_accuracy_at, numeric(1))
+best_index <- which.max(threshold_scores)
+threshold <- threshold_candidates[best_index]
+data.frame(threshold = threshold, balanced_accuracy = threshold_scores[best_index])
+```
+
+
+Test: -- change below !!
+```{r}
+# already done i think
+#x_test <- array(test$x[1:1000,,] / 255, c(1000, 28, 28, 1))
+#labels_test <- mnist$test$y[1:1000]
+#test_pairs <- make_batch(
+#  make_pairs(1:1000, 600, class_labels = labels_test),
+#  images = x_test,
+#  class_labels = labels_test
+#)
+
+test_distance <- as.numeric(predict(
+  model, list(test$left, test$right)
+))
+
+true_same <- as.logical(test$y[, 1]) # real answer if same/diff writer
+predicted_same <- test_distance < threshold # uses model distance & best threshold 
+case <- ifelse(true_same,
+               ifelse(predicted_same, "Correct: same", "Incorrect: different"),
+               ifelse(predicted_same, "Incorrect: same", "Correct: different"))
+
+table(case)
+
+# confusion matrix
+table(
+  Actual = true_same,
+  Predicted = predicted_same
+)
+```
+
