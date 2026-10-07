@@ -1,6 +1,7 @@
 # Load necessary packages
 library(pacman) # package to easily load multiple packages
-p_load(tidyverse) # add packages that are used across the assignment separated by commas
+p_load(tidyverse, keras3) # load packages that are used across sections in the assignment
+use_backend("tensorflow") # use tensorflow backend for keras
 
 # Read in data
-handwriting <- read_rds("data/handwriting.rds")
+handwriting <- readRDS("data/handwriting.rds")
