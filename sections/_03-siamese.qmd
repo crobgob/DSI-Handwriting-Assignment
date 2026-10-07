@@ -4,8 +4,8 @@
 ### Build a Siamese network that estimates whether two images were written by the same person. Use contrastive loss or triplet loss. Explain how you construct training examples and evaluate matching performance.
 
 ```{r readdata}
-data <- readRDS("data/handwriting.rds")
-#head(data$metadata)
+handwriting <- readRDS("data/handwriting.rds")
+#head(handwriting$metadata)
 
 library(keras3)
 use_backend("tensorflow")
@@ -13,13 +13,13 @@ use_backend("tensorflow")
 # images is an integer array with values from 0 (background) to 255 (ink).
 
 # below = x in e.g.
-x <- data$images / 255 # scale the pixels to 0-1
-#dim(data$images) # 25000 x 28 x 28 x 1 - 1 = number of image channels (greyscale = 1)
+x <- handwriting$images / 255 # scale the pixels to 0-1
+#dim(handwriting$images) # 25000 x 28 x 28 x 1 - 1 = number of image channels (greyscale = 1)
 # therefore: 25,000 images, 28 x 28 pixels, 1 image channel
 #range(x) # 0 1
 
 # below = 'labels' in e.g.
-y_person <- data$metadata$person_id - 1L # subtracts 1 from every value in ID
+y_person <- handwriting$metadata$person_id - 1L # subtracts 1 from every value in ID
 #range(y_person) # 0 19 = 20 people
 
 set.seed(25)
@@ -103,29 +103,29 @@ generalisability of the model by evaluating its performance on writers it truly
 hasn't seen before.
 Limitation - only 20 writers.
 
-We decided on a 60/30/10 split?
+We decided on a 60/30/10 split? - CHANGED to 60/20/20
 
 
 ```{r datasplit}
 # get the writer IDs belonging in each split
 set.seed(25)
-writers <- unique(data$metadata$person_id - 1L)
+writers <- unique(handwriting$metadata$person_id - 1L)
 train_writers <- sample(writers, 0.6*length(writers))
 
 rest_writers <- setdiff(writers, train_writers)
 set.seed(25)
-valid_writers <- sample(rest_writers, 0.75*length(rest_writers))
+valid_writers <- sample(rest_writers, 0.5*length(rest_writers))
 test_writers <- setdiff(rest_writers, valid_writers)
 
 # now extract the image IDs belonging to each split
-train_ids <- which(data$metadata$person_id %in% train_writers)
-valid_ids <- which(data$metadata$person_id %in% valid_writers)
-test_ids <- which(data$metadata$person_id %in% test_writers)
+train_ids <- which(handwriting$metadata$person_id %in% train_writers)
+valid_ids <- which(handwriting$metadata$person_id %in% valid_writers)
+test_ids <- which(handwriting$metadata$person_id %in% test_writers)
 
 # now make the image index pairs in each split
-train_pairs <- make_pairs(train_ids, length(train_ids), data$metadata)
-valid_pairs <- make_pairs(valid_ids, length(valid_ids), data$metadata)
-test_pairs <- make_pairs(test_ids, length(test_ids), data$metadata)
+train_pairs <- make_pairs(train_ids, length(train_ids), handwriting$metadata)
+valid_pairs <- make_pairs(valid_ids, length(valid_ids), handwriting$metadata)
+test_pairs <- make_pairs(test_ids, length(test_ids), handwriting$metadata)
 
 # for each pair, extract the image + 0/1
 train <- make_batch(train_pairs)
