@@ -13,8 +13,8 @@ from handwritten digits with a CNN and a Siamese network. The brief is
    |------------|---------|
    | R          | 4.6.1   |
    | Quarto     | 1.10.18 |
-   | Python     | TBD     |
-   | TensorFlow | TBD     |
+   | Python     | 3.12.15 |
+   | TensorFlow | 2.21    |
 
    R packages will be pinned in `renv.lock` (not created yet). Once it exists,
    run `renv::restore()` after cloning.
