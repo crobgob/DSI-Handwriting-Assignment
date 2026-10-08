@@ -5,11 +5,15 @@ author:
   - Corey Webb
   - Shirley Knight
   - Jess Prevost
+execute:
+  warning: false
+  message: false
 ---
 
 ```{r}
 #| label: setup
 #| include: false
+
 source("R/splitData.R")
 source("R/prepData.R")
 ```

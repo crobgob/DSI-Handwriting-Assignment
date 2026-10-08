@@ -1,3 +1,165 @@
 ## Exploratory data analysis
 
-<!-- Task 1: examples across people, digits and sessions; sources of variation; limitations of the simulated data. -->
+The provided dataset consists of a four dimensional array comprised of 25 000 handwritten digits of 28 by 28 pixels and associated metadata. The five digits from 0 to 4 were each replicated 50 times by 20 different individuals during each of five independent sessions. The array contained no missing values, indicating all images were complete. Pixel values ranged from zero, indicating a blank background, to 255, representing a pixel completely covered in ink. 
+
+Variation arose between individuals in several different ways (@fig-inter-ind_var). The size of digits written by different people varied and this was particularly pronounced in the digit zero. For example, individuals 3 and 12 had much smaller zeros than individuals 1, 10, and 16 (@fig-inter-ind_var). The angle of lines as well as the curve of the lines within the digits varied. The vertical line in digit one which was straight and vertical for individual 1, more curved for individual 3 and straight yet more diagonal for individual 10. The diagonal and vertical lines in digit four varied in angle and curvature across individuals, and the zeros tilted in different directions for individuals 10 and 12 compared to 1,3, and 16 (@fig-inter-ind_var). 
+
+While inter-individual variation was more pronounced, there was still variation within individuals both across sessions (@fig-within-ind-var) and within a given session (@fig-within-ind-var-single-session). The replicates of a digit for a given individual tended to be similar sized. Variation once again arose in the angle and curvature of certain lines such as the top right hand corner of the zeros which differed slightly and the angle of the horizontal line at the bottom of the digit two (@fig-within-ind-var). Intra-individual variation was more recognisable within an individual across different sessions than within an individual in the same session. For person 16, the line at the bottom of digit two was more a more similar angle across replicates in the same session than across different sessions. Across replicates from the same individual and the same session variability arose more in the density of the pixels which can be seen when looking at the bottom horizontal line of the digit one (@fig-within-ind-var-single-session). 
+
+There are some clearly visible limitations when using simulated data for handwritten digits. The first is the presence of unusually straight lines and sharp angles in digits where these are unlikely to occur. An example of this is in the top right corner of the digit zero for person 10 (@fig-inter-ind_var). The second is that in some digits the continuity of the line is interrupted, for example the gaps in the digit 2 in sessions 3,4 and 5 for person 16 (@fig-within-ind-var) and all the selected samples for digit two in session 1 (@fig-within-ind-var-single-session). Further, the simulated handwritten data fails to mimic changes in the thickness of the font which is likely to occur in real world data where different people use variable pressure when writing. There is no variation in the style of digits. For example, the digit one can also be written as a single vertical line. In some cases, the simulation also does not look accurate, such as for person threes digit 1 which looks much more similar to a 2 and is unlikely to be written like this in real life.
+
+```{r}
+#| label: data_exploration
+#| eval: false
+
+# Actual 'images'
+class(handwriting$images) # array containing images
+str(handwriting) # split into images themselves and metadata for images 
+dim(handwriting$images) # 25000 images each 28 by 28 pixels
+handwriting$images[1,1:28,1:28,1] # example of single image
+anyNA(handwriting$images) # no NA values within any of the images
+
+# Scale of pixels (values within images)
+str(handwriting$image_scale)
+summary(handwriting$image_scale) # ranges from 0 (background) to 255 (maximum ink)
+
+# Metadata
+class(handwriting$metadata) # data frame containing metadata
+str(handwriting$metadata)
+summary(handwriting$metadata) 
+# 20 people, 5 sessions, 5 digits, 50 replicates per digit per person per session = 25 000
+head(handwriting$metadata)
+anyNA(handwriting$metadata)
+
+```
+
+```{r}
+#| label: fig-inter-ind_var
+#| fig-cap: "Handwritten digits for four randomly selected individuals indicating inter-individual variability within a single session (Session 1, Samples 1)."
+#| fig-width: 5
+#| fig-height: 5
+
+# Randomly select a session and four people 
+set.seed(99)
+people <- sample(20, 5, replace = FALSE) %>% sort()
+
+# Get IDs for plotting examples across people and digits for a single session
+image_id1 <- handwriting$metadata %>% 
+  filter(session == 1, # session 1 only
+         replicate == 1, # replicate 1 only
+         person_id %in% people) %>% # only first 5 people as samples
+  select(image_id) %>%
+  pull() # extract the image ids as list of integers
+
+# Create a data frame from array data for plotting
+samples <- expand.grid(image_id = image_id1, row = 1:28, column = 1:28)  %>% # empty matrix with specific image_ids
+  left_join(handwriting$metadata %>% select(image_id, person_id, digit))
+samples$value <- as.vector(handwriting$images[image_id1,,,]) # add pixel scale values
+
+samples %>%
+  ggplot(aes(x = column, y = row, fill = value)) +
+  geom_raster() +
+  scale_fill_gradient(low = "white", high = "black") + # colour pixels by scale value
+  scale_y_reverse() + # flip to correct orientation
+  coord_equal(expand = FALSE) + # same height and width of pixels
+  scale_x_continuous(position = "top") + # Move x axis label to the top
+  facet_grid(person_id ~ digit, switch = "y") + # person by rows, digits by columns
+  theme_void() + # remove formatting then re-add where necessary below
+  theme(legend.position = "none", # remove legend
+        panel.border = element_rect(color = "grey", fill = NA, size = 0.5), # outline each of the drawings
+        strip.background = element_rect(fill = "lightgrey", size = 0.5), # boxes for x and y axis labels
+        strip.text.x = element_text(size = 12, face = "bold", margin = margin(b = 5, t = 5)), # x axis labels
+        strip.text.y = element_text(size = 12, face = "bold", angle = 0, margin = margin(r = 5, l = 5)), # y axis labels
+        axis.title.x = element_text(size = 13, margin = margin(t = 5, b = 5)), # x axis title 
+        axis.title.y = element_text(size = 13, margin = margin(r = 5, l = 5), angle = 90) # y axis title
+        ) +
+  labs(x = "Digit", y = "Person")
+
+```
+
+```{r}
+#| label: fig-within-ind-var
+#| fig-cap: "Handwritten digits for a single randomly selected individual (Person 16) from five different sessions (all Sample 1) indicating within-individual variability across sessions."
+#| fig-width: 5
+#| fig-height: 5
+
+# Randomly select an individual
+set.seed(99)
+person <- sample(20, 1)
+
+# Get IDs for plotting examples for one person across sessions and digits
+image_id2 <- handwriting$metadata %>% 
+  filter(replicate == 1, # replicate 1 only
+         person_id == person) %>% # randomly selected person 
+  select(image_id) %>%
+  pull() # extract the image ids as list of integers
+
+# Create a data frame from array data for plotting
+samples <- expand.grid(image_id = image_id2, row = 1:28, column = 1:28)  %>% # empty matrix with specific image_ids
+  left_join(handwriting$metadata %>% select(image_id, session, digit))
+samples$value <- as.vector(handwriting$images[image_id2,,,]) # add pixel scale values
+
+samples %>%
+  ggplot(aes(x = column, y = row, fill = value)) +
+  geom_raster() +
+  scale_fill_gradient(low = "white", high = "black") + # colour pixels by scale value
+  scale_y_reverse() + # flip to correct orientation
+  coord_equal(expand = FALSE) + # same height and width of pixels
+  scale_x_continuous(position = "top") + # Move x axis label to the top
+  facet_grid(session ~ digit, switch = "y") + # person by rows, digits by columns
+  theme_void() + # remove formatting then re-add where necessary below
+  theme(legend.position = "none", # remove legend
+        panel.border = element_rect(color = "grey", fill = NA, size = 0.5), # outline each of the drawings
+        strip.background = element_rect(fill = "lightgrey", size = 0.5), # boxes for x and y axis labels
+        strip.text.x = element_text(size = 12, face = "bold", margin = margin(b = 5, t = 5)), # x axis labels
+        strip.text.y = element_text(size = 12, face = "bold", angle = 0, margin = margin(r = 5, l = 5)), # y axis labels
+        axis.title.x = element_text(size = 13, margin = margin(t = 5, b = 5)), # x axis title 
+        axis.title.y = element_text(size = 13, margin = margin(r = 5, l = 5), angle = 90) # y axis title
+        ) +
+  labs(x = "Digit", y = "Session")
+
+```
+
+```{r}
+#| label: fig-within-ind-var-single-session
+#| fig-cap: "Handwritten digits for a single randomly selected individual (Person 16) from five random samples within a single session (Session 1) indicating within-individual variability within a session"
+#| fig-width: 5
+#| fig-height: 5
+
+# Randomly select samples
+set.seed(99)
+samples <- sample(50, 5, replace = FALSE) %>% sort()
+
+# Get IDs for plotting examples for one person across sessions and digits
+image_id3 <- handwriting$metadata %>% 
+  filter(session == 1,
+         replicate %in% samples, # random samples
+         person_id == person) %>% # randomly selected person 
+  select(image_id) %>%
+  pull() # extract the image ids as list of integers
+
+# Create a data frame from array data for plotting
+samples <- expand.grid(image_id = image_id3, row = 1:28, column = 1:28)  %>% # empty matrix with specific image_ids
+  left_join(handwriting$metadata %>% select(image_id, replicate, digit))
+samples$value <- as.vector(handwriting$images[image_id3,,,]) # add pixel scale values
+
+samples %>%
+  ggplot(aes(x = column, y = row, fill = value)) +
+  geom_raster() +
+  scale_fill_gradient(low = "white", high = "black") + # colour pixels by scale value
+  scale_y_reverse() + # flip to correct orientation
+  coord_equal(expand = FALSE) + # same height and width of pixels
+  scale_x_continuous(position = "top") + # Move x axis label to the top
+  facet_grid(replicate ~ digit, switch = "y") + # person by rows, digits by columns
+  theme_void() + # remove formatting then re-add where necessary below
+  theme(legend.position = "none", # remove legend
+        panel.border = element_rect(color = "grey", fill = NA, size = 0.5), # outline each of the drawings
+        strip.background = element_rect(fill = "lightgrey", size = 0.5), # boxes for x and y axis labels
+        strip.text.x = element_text(size = 12, face = "bold", margin = margin(b = 5, t = 5)), # x axis labels
+        strip.text.y = element_text(size = 12, face = "bold", angle = 0, margin = margin(r = 5, l = 5)), # y axis labels
+        axis.title.x = element_text(size = 13, margin = margin(t = 5, b = 5)), # x axis title 
+        axis.title.y = element_text(size = 13, margin = margin(r = 5, l = 5), angle = 90) # y axis title
+        ) +
+  labs(x = "Digit", y = "Replicate")
+
+```
