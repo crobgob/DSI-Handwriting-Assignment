@@ -11,17 +11,15 @@ L = yD^2 + (1-y)\max(0,m-D)^2
 $$
 where $y$ is a binary label with $y = 1$ for a positive pair (i.e. same writer, same digit) and $D$ is the Euclidean distance between the embeddings. The hyperparameter $m$ sets the distance at which embeddings for similar pairs results in zero loss (i.e. where the distance reaches the margin) versus embeddings for dissimilar pairs resulting in a large loss, thereby optimising the network to minimise differences between image pairs from the same writer and maximising differences between image pairs from different writers [@Elaraby_2023]. The margin for the initial Siamese network was set as one, but was optimised in a hyperparameter search in [Hyperparameter optimisation](#hyperparameter-optimisation). 
 
-The data were split into 60% training, 20% validation, and 20% test sets. The data were grouped by writer with different writers in each set to ensure that the network learnt to recognise similarities in writing style but without leakage of specific writers to the validation and test set to test generalisability of the model. However, since there were only 20 writers, this split meant only 4 writers in each of the validation and test sets, which is a significant limitation and expanded on in [Train, validation and test strategy](#train,-validation-and-test-strategy). 
+The data were split into 60% training, 20% validation, and 20% test sets. The data were grouped by writer with different writers in each set to ensure that the network learnt to recognise similarities in writing style but without leakage of specific writers to the validation and test set to test generalisability of the model. However, since there were only 20 writers, this split meant only 4 writers in each of the validation and test sets, which is a significant limitation and expanded on in [Train, validation and test strategy](#train-validation-and-test-strategy). 
 
 The shared CNN encoder architecture consisted of two convolutional layers with 16 and 32 filters respectively, both with a filter size of 3 and a ReLu activation function to introduce non-linearity, a max pooling layer between these convolutional layers with both a pool size and stride of 2, and at the end, a global average pooling layer and a dense layer. The convolutional layers learn local image features while max pooling reduces the dimensions of the feature maps. Global pooling converts the feature maps into a vector which is mapped to a 16-number embedding by the dense layer. A relatively simple encoder is used since the input images are low-resolution and contain easily learnable features such as curves and strokes [ref].
 
-Pairs of images are sent 
+In the Siamese model, pairs of images are supplied to the encoder to produce their embeddings and then the Euclidean distance between each pair is calculated. The model is compiled using the Adam optimiser and using the above contrastive loss function which is calculated using the Euclidean distances and a margin of one, and averaged for every batch. Epoch is set to 5 and batch size to 64. 
 
+The outputs from the Siamese model are the Euclidean distances between the two embeddings for each digit pair, which is then turned into the classification of "same" or "different" writer using a threshold determined by the validation pairs [also a limitation with the few writers & the split we have]. We compared the balanced accuracy for actual same and different digit pairs from the validation set at different thresholds, and chose the threshold which maximised the balanced accuracy. The different thresholds tested were all the actual distances between the validation pairs. 
 
-
-The Siamese model outputs distances between the two embeddings for each digit pair, which is then turned into a classification of "same" or "different" writer using a threshold determined by the validation pairs [also a limitation with the few writers & the split we have]. We compared the balanced accuracy for actual same and different digit pairs at different thresholds, and chose the threshold with the maximised balanced accuracy. 
-
-The generalisability of our model was evaluated by predicting on unseen writers' digit image-pairs in the test set. The results are shown in @tab-confusionmat and @tab-testresults. @fig-test-results shows the test batch's predicted and true results
+The generalisability of our model was evaluated by predicting on unseen writers' digit image-pairs in the test set. The results are shown in @fig-confusionmat and @tbl-testresults. Examples of pairs from the test batch with predicted and true values are shown in @fig-test-results 
 
 ```{r readdata}
 # below = x in e.g.
@@ -131,8 +129,6 @@ test  <- make_batch(test_pairs)
 ```{r}
 #| label: fig-pairs
 #| fig-cap: "Example training and validation pairs. Top row: training pairs (same writer left, different writer right). Bottom row: validation pairs (same writer left, different writer right)."
-#| fig-width: 8
-#| fig-height: 4
 
 par(mfrow = c(2, 4), mar = c(1, 1, 2, 1))
 
@@ -190,7 +186,6 @@ distance <- list(encoder(a), encoder(b)) |>
 model <- keras_model(list(a, b), distance)
 ```
 
-
 ```{r constrastiveloss}
 
 contrastive_loss <- function(y, d) {
@@ -202,11 +197,15 @@ contrastive_loss <- function(y, d) {
 ```
 
 ```{r compile}
+set.seed(25)
+
+# Use Adam optimiser to compile model and contrastive loss function defined earlier
 model |> compile(
   optimizer = optimizer_adam(1e-3),
   loss = contrastive_loss
 )
 
+# Fit model with training data and validation data
 model |> fit(
   list(train$left, train$right), train$y,
   validation_data = list(
@@ -220,63 +219,70 @@ model |> fit(
 
 ```{r valid_dist}
 
+# Calculate the model predicted distances between the pairs in the validation data
 valid_distance <- as.numeric(predict(model, list(valid$left, valid$right), verbose = 0))
+# Extract the observed labels for whether the pairs are the same or different for validation data
 valid_same <- as.logical(valid$y[, 1])
 
+# Function to calculate accuracy at different thresholds
 balanced_accuracy_at <- function(cut) {
-  predicts_same <- valid_distance < cut
-  same_rate <- mean(predicts_same[valid_same])
-  different_rate <- mean(!predicts_same[!valid_same])
-  (same_rate + different_rate) / 2
+  predicts_same <- valid_distance < cut # at given threshold (cut) would model predict same or different?
+  same_rate <- mean(predicts_same[valid_same]) # accuracy for "same" pairs
+  different_rate <- mean(!predicts_same[!valid_same]) # accuracy for "different" pairs
+  (same_rate + different_rate) / 2 # mean accuracy for "same" and "different" ("alanced accuracy)
 }
 
-#example_thresholds <- unique(as.numeric(
-#  quantile(valid_distance, c(.25, .5, .75))
-#))
-#data.frame(
-#  threshold = example_thresholds,
-#  balanced_accuracy = vapply(example_thresholds, balanced_accuracy_at, numeric(1))
-#)
-
-threshold_candidates <- sort(unique(valid_distance))
-threshold_scores <- vapply(threshold_candidates, balanced_accuracy_at, numeric(1))
-best_index <- which.max(threshold_scores)
-threshold <- threshold_candidates[best_index]
+threshold_candidates <- sort(unique(valid_distance)) # threshold candidates are based on the distances themselves
+threshold_scores <- vapply(threshold_candidates, balanced_accuracy_at, numeric(1)) # calculate balanced accuracy for all threshold candidates
+threshold <- threshold_candidates[which.max(threshold_scores)] 
+best_index <- which.max(threshold_scores) # index for the threshold that maximises the balanced accuracy
+threshold <- threshold_candidates[best_index] # threshold that maximises the balanced accuracy
 
 data.frame(threshold = threshold, balanced_accuracy = threshold_scores[best_index])
 ```
 
-
-Test: -- change below !!
 ```{r}
-#| label: tab-confusionmat
+#| label: fig-confusionmat
+#| fig-cap: "Confusion matrix for predictions from the Siamese neural network on pairs of images in the test dataset."
 
-test_distance <- as.numeric(predict(
-  model, list(test$left, test$right), verbose =0))
-
-true_same <- as.logical(test$y[, 1]) # real answer if same/diff writer
+# Calculate the model predicted distances between the pairs in the test data
+test_distance <- as.numeric(predict(model, list(test$left, test$right), verbose =0))
+# Extract the observed labels for whether the pairs are the same or different for test data
+true_same <- as.logical(test$y[, 1]) 
+# Predicted labels based on selected threshold
 predicted_same <- test_distance < threshold # uses model distance & best threshold 
 
-
-# confusion matrix
+# Construct confusion matrix based on observed and predicted labels
 confusion_matrix <- table(
   Actual = factor(true_same,
-                  levels = c(FALSE, TRUE),
-                  labels = c("Different writer", "Same writer")),
+                  levels = c(TRUE, FALSE),
+                  labels = c("Same writer", "Different writer")),
   Predicted = factor(predicted_same,
-                     levels = c(FALSE, TRUE),
-                     labels = c("Different writer", "Same writer"))
+                     levels = c(TRUE, FALSE),
+                     labels = c("Same writer", "Different writer"))
 )
 
-confusion_matrix
+# Plot confusion matrix
+confusion_matrix %>% as.data.frame() %>% # first convert to data frame
+  ggplot(aes(x = Predicted, y = Actual, fill = Freq)) + # fill with counts
+  geom_tile() +
+  geom_text(aes(label = Freq), color = "black", size = 6) +
+  scale_fill_gradient(low = "orange", high = "deepskyblue") + # add colour according to scale
+  scale_y_discrete(limits = rev) + # swap categories on y axis
+  scale_x_discrete(position = "top") + # move labels to top
+  labs(x = "Predicted", y = "Actual") +
+  theme_minimal() + 
+  theme(panel.grid = element_blank(), legend.position = "none", # remove legend
+        text = element_text(size = 16), # increase text size
+        axis.text.y = element_text(angle = 90, hjust = 0.5)) # adjust y axis labels
+
 ```
 
-
 ```{r}
-#| label: tab-testresults
+#| label: tbl-testresults
+#| tbl-cap: "Assessment metrics for Siamese neural network predictions on pairs of images in the test set."
 
-
-# extract values from confusion matrix
+# Extract values from confusion matrix
 TN <- confusion_matrix["Different writer", "Different writer"]
 FP <- confusion_matrix["Different writer", "Same writer"]
 FN <- confusion_matrix["Same writer", "Different writer"]
@@ -295,20 +301,18 @@ results <- data.frame(
 
 results$Value <- sprintf("%.1f%%", results$Value * 100)
 
-results
+results %>% kable()
 ```
 
 ```{r}
 #| label: fig-test-results
 #| fig-cap: "Sample test pairs with true label, predicted label, and distance score. Green border = correct prediction, red = incorrect."
-#| fig-width: 10
-#| fig-height: 6
 
-set.seed(42)
+set.seed(38)
 n_show <- 8
 sample_idx <- sample(seq_len(nrow(test_pairs)), n_show)
 
-par(mfrow = c(2, n_show), mar = c(0.5, 0.5, 2.5, 0.5))
+par(mfrow = c(4, 4), mar = c(0.5, 0.5, 2.5, 0.5))
 
 for (i in sample_idx) {
   img1 <- x[test_pairs[i, 1], , , 1]
@@ -320,14 +324,12 @@ for (i in sample_idx) {
   border_col   <- ifelse(correct, "forestgreen", "red3")
   score        <- round(test_distance[i], 3)
   
-  title_text <- paste0(
-    "True: ", true_label, ",", " Pred: ", pred_label, "\nd=", score
-  )
+  title_text <- paste0("True: ", true_label, ",", " Pred: ", pred_label, "\nd = ", score)
   
   # left image
   image(t(img1[nrow(img1):1, ]), col = grey(seq(1, 0, length = 256)),
         axes = FALSE, main = title_text,
-        cex.main = 0.75)
+        cex.main = 1)
   box(col = border_col, lwd = 2)
   
   # right image
