@@ -4,9 +4,12 @@
 
 Don't repeat other sections 
 
-Define CNNs and why useful for this task (person identification from handwriting) and potential applications:
+Define Convolutional neural networks (CNNs) and why useful for this task (person identification from handwriting) and potential applications:
 "Which of a given set of people was this written by?"
 
-Define Siamese networks and why useful for this task (handwriting matching) and potential applications (eg. signature identification [@herman_2026])
+Define Siamese neural networks and why useful for this task (handwriting matching) and potential applications (eg. signature identification [@herman_2026])
 "Is this written by the same person?"
 Siamese networks sends two images through an identical CNN and maps each to an embedding (a type of vector). The distance between the two embeddings is calculated and used in the loss function which encourages similar images to have embeddings close together and unrelated images to be further apart.
+
+The analysis was conducted in R version 4.6.1 [@R]. Both CNNs and Siamese networks were fitted using the Keras framework via the *keras3* R package [@keras3] using the TensorFlow backend [@tensorflow]. The tidyverse package [@tidyverse] was utilised throughout the analysis for data manipulation and plotting using *ggplot2.* 
+
