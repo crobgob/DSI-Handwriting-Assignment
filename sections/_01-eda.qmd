@@ -1,6 +1,6 @@
 ## Exploratory data analysis
 
-The provided dataset consists of a four dimensional array comprised of 25 000 handwritten digits of 28 by 28 pixels and associated metadata. The five digits from 0 to 4 were each replicated 50 times by 20 different individuals during each of five independent sessions. The array contained no missing values, indicating all images were complete. Pixel values ranged from zero, indicating a blank background, to 255, representing a pixel completely covered in ink. 
+The provided dataset consists of a four dimensional array comprising 25 000 tensor images of handwritten digits each, with a resolution of 28 by 28 pixels and a single channel dimension indicating grayscale images, along with associated metadata. The five digits from 0 to 4 were each replicated 50 times by 20 different individuals during each of five independent sessions. The array contained no missing values, indicating all images were complete. Pixel values ranged from zero, indicating a blank background, to 255, representing a pixel completely covered in ink. 
 
 Variation arose between individuals in several different ways (@fig-inter-ind_var). The size of digits written by different people varied and this was particularly pronounced in the digit zero. For example, individuals 3 and 12 had much smaller zeros than individuals 1, 10, and 16 (@fig-inter-ind_var). The angle of lines as well as the curve of the lines within the digits varied. The vertical line in digit one which was straight and vertical for individual 1, more curved for individual 3 and straight yet more diagonal for individual 10. The diagonal and vertical lines in digit four varied in angle and curvature across individuals, and the zeros tilted in different directions for individuals 10 and 12 compared to 1,3, and 16 (@fig-inter-ind_var). 
 
@@ -15,7 +15,7 @@ There are some clearly visible limitations when using simulated data for handwri
 # Actual 'images'
 class(handwriting$images) # array containing images
 str(handwriting) # split into images themselves and metadata for images 
-dim(handwriting$images) # 25000 images each 28 by 28 pixels
+dim(handwriting$images) # 25000 images each 28 by 28 pixels and a single channel
 handwriting$images[1,1:28,1:28,1] # example of single image
 anyNA(handwriting$images) # no NA values within any of the images
 
