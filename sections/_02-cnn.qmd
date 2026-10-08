@@ -1,3 +1,157 @@
 ## Writer identification with a CNN
 
 <!-- Task 2: build and evaluate a CNN with writer ID as the response; overall and per-digit performance; what the measures mean in real-world terms. -->
+
+```{r}
+#| label: cnn-cache
+
+cnn_results_file <- "results/cnn_cv.rds"
+cnn_retrain <- !file.exists(cnn_results_file)
+```
+
+```{r}
+#| label: cnn-setup
+#| eval: !expr cnn_retrain
+
+library(keras3)
+use_backend("tensorflow")
+```
+
+```{r}
+#| label: cnn-preprocess
+#| eval: !expr cnn_retrain
+
+# Scale pixel values to 0,1
+x <- handwriting$images / 255
+
+y <- to_categorical(handwriting$metadata$person_id - 1, 20) #needs classes numbered from 0
+```
+
+```{r}
+#| label: cnn-define
+#| eval: !expr cnn_retrain
+
+# Each fold needs a new model with fresh weights, so the model is built by a function
+build_cnn <- function() {
+  input <- layer_input(shape = c(28, 28, 1))
+
+  # Ian's model structure taken from lecture slides
+  output <- input %>%
+    layer_conv_2d(filters = 16, kernel_size = c(3,3)) %>%
+    layer_activation('relu') %>%
+    layer_dropout(rate = 0.20) %>%
+    layer_conv_2d(filters = 16, kernel_size = c(3,3), activation = "relu") %>%
+    layer_max_pooling_2d(pool_size = c(2, 2)) %>%
+    layer_flatten() %>%
+    layer_dense(units = 20, activation = 'softmax')
+
+  model <- keras_model(inputs = input, outputs = output)
+
+  model %>% compile(
+    loss = 'categorical_crossentropy',
+    optimizer = optimizer_adam(learning_rate = 0.01),
+    metrics = c('accuracy'),
+  )
+
+  model
+}
+```
+
+```{r}
+#| label: cnn-fit
+#| eval: !expr cnn_retrain
+
+# 5-fold cross-validation by session: train on four sessions, hold out the fifth
+cnn_epochs <- 5
+cnn_history <- list()
+cnn_predictions <- list()
+
+for (fold in 1:5) {
+  train_id <- which(handwriting$metadata$session != fold)
+  test_id <- which(handwriting$metadata$session == fold)
+
+  x_train <- x[train_id,,,,drop = FALSE]
+  y_train <- y[train_id,]
+  x_test <- x[test_id,,,,drop = FALSE]
+  y_test <- y[test_id,]
+
+  set_random_seed(67)
+  model <- build_cnn()
+
+  history <- model %>% fit(
+    x_train, y_train,
+    epochs = cnn_epochs, batch_size = 8192,
+    validation_data = list(x_test, y_test), shuffle = TRUE,
+    verbose = 0
+  )
+
+  y_test_hat <- model %>% predict(x_test, verbose = 0) %>% op_argmax(axis = 2) %>% as.numeric()
+
+  cnn_history[[fold]] <- tibble(fold = fold, epoch = 1:cnn_epochs,
+                                train = history$metrics$accuracy,
+                                held_out = history$metrics$val_accuracy)
+  cnn_predictions[[fold]] <- as_tibble(handwriting$metadata[test_id,]) %>%
+    mutate(fold = fold, predicted = y_test_hat)
+}
+
+# Save everything the rest of this section needs
+dir.create("results", showWarnings = FALSE)
+saveRDS(list(summary = capture.output(print(build_cnn())), # untrained copy, so only the model's own parameters are counted
+             history = bind_rows(cnn_history),
+             predictions = bind_rows(cnn_predictions)),
+        cnn_results_file)
+```
+
+```{r}
+#| label: cnn-load
+
+cnn_results <- readRDS(cnn_results_file)
+```
+
+```{r}
+#| label: cnn-summary
+
+cat(cnn_results$summary, sep = "\n")
+```
+
+```{r}
+#| label: cnn-history
+
+# One line per fold
+cnn_results$history %>%
+  pivot_longer(c(train, held_out), names_to = "data", values_to = "accuracy") %>%
+  ggplot(aes(x = epoch, y = accuracy, colour = data, group = interaction(data, fold))) +
+  geom_line() +
+  ylim(0, 1)
+```
+
+```{r}
+#| label: cnn-evaluate
+
+# Accuracy on the held-out session of each fold
+cnn_folds <- cnn_results$predictions %>%
+  group_by(fold) %>%
+  summarise(n = n(), accuracy = mean(person_id == predicted))
+cnn_folds
+
+# Cross-validated accuracy
+cnn_folds %>% summarise(mean_accuracy = mean(accuracy), sd_accuracy = sd(accuracy))
+```
+
+```{r}
+#| label: cnn-confusion
+
+# Every image is predicted once, by the model that did not see its session
+y_test_original <- cnn_results$predictions$person_id
+y_test_hat <- cnn_results$predictions$predicted
+table(y_test_original, y_test_hat)
+```
+
+```{r}
+#| label: cnn-by-digit
+
+cnn_results$predictions %>%
+  group_by(digit, person_id) %>%
+  summarise(accuracy = mean(person_id == predicted)) %>%
+  arrange(desc(accuracy))
+```
