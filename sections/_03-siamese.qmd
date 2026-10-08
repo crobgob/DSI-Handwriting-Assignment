@@ -1,12 +1,4 @@
 ## Writer verification with a Siamese network
-```{r setup, include = FALSE}
-knitr::opts_chunk$set(
-  echo = FALSE,       # Show code by default
-  message = FALSE,   # Suppress package startup messages globally
-  warning = FALSE,   # Suppress warnings globally
-  fig.align = "center" 
-)
-```
 
 
 <!-- Task 3: contrastive or triplet loss; how training examples are constructed; matching performance. -->
