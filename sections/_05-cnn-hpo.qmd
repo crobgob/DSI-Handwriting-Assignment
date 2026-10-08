@@ -5,9 +5,6 @@
 ```{r}
 #| label: cnn-hpo-cache
 
-# Training results are saved to three files and reused:
-#   the coarse grid, the refined grid, and the test predictions of the selected combination.
-# The training chunks below only run when their file is missing.
 # After changing any of the training code, delete the files and render again.
 cnn_hpo_coarse_file <- "results/cnn_hpo_coarse.rds"
 cnn_hpo_refined_file <- "results/cnn_hpo_refined.rds"
@@ -116,11 +113,26 @@ plot_grid <- function(grid_summary) {
     geom_line() +
     geom_point(size = 2) +
     scale_x_log10(breaks = unique(grid_summary$learning_rate)) +
-    facet_wrap(~ filters, labeller = labeller(filters = function(f) paste("filters:", f))) +
+    scale_y_continuous(labels = scales::percent) +
+    facet_wrap(~ filters, labeller = labeller(filters = function(f) paste("Filters:", f))) +
     labs(x = "Learning rate", y = "Accuracy (cross-validation)", colour = "Dropout rate") +
+    theme_minimal() +
     theme(legend.position = "top", axis.text.x = element_text(angle = 45, hjust = 1))
 }
+
+# A grid summary as a formatted table, with accuracies as percentages
+table_grid <- function(grid_summary) {
+  grid_summary %>%
+    mutate(learning_rate = format(learning_rate, scientific = FALSE, drop0trailing = TRUE),
+           across(c(best_accuracy, best_se, accuracy_1se), ~ 100 * .x)) %>%
+    select(learning_rate, dropout, filters, best_accuracy, best_se, best_epoch, epoch_1se, accuracy_1se) %>%
+    knitr::kable(col.names = c("Learning rate", "Dropout rate", "Filters", "Best CV accuracy (%)", "Standard error (%)",
+                               "Best epoch", "One-SE epoch", "CV accuracy at one-SE epoch (%)"),
+                 digits = 1, align = "r")
+}
 ```
+
+#### Coarse grid
 
 ```{r}
 #| label: cnn-hpo-coarse
@@ -136,17 +148,23 @@ saveRDS(cv_grid(cnn_hpo_coarse_grid, epochs = 20), cnn_hpo_coarse_file)
 ```
 
 ```{r}
-#| label: cnn-hpo-coarse-results
+#| label: fig-cnn-hpo-coarse
+#| fig-cap: "Coarse grid search: best cross-validated accuracy of each combination of learning rate, dropout rate and number of filters (4-fold cross-validation over sessions 1-4)."
+#| fig-width: 7
+#| fig-height: 4
 
 cnn_hpo_coarse <- summarise_grid(readRDS(cnn_hpo_coarse_file))
-cnn_hpo_coarse
+plot_grid(cnn_hpo_coarse)
 ```
 
 ```{r}
-#| label: cnn-hpo-coarse-plot
+#| label: tbl-cnn-hpo-coarse
+#| tbl-cap: "Coarse grid search results, from highest to lowest cross-validated (CV) accuracy. The one-SE epoch is the earliest epoch whose CV accuracy is within one standard error of the best epoch."
 
-plot_grid(cnn_hpo_coarse)
+table_grid(cnn_hpo_coarse)
 ```
+
+#### Refined grid
 
 ```{r}
 #| label: cnn-hpo-refined
@@ -164,29 +182,40 @@ saveRDS(cv_grid(cnn_hpo_refined_grid, epochs = 40), cnn_hpo_refined_file)
 ```
 
 ```{r}
-#| label: cnn-hpo-refined-results
+#| label: fig-cnn-hpo-refined
+#| fig-cap: "Refined grid search: best cross-validated accuracy for lower learning rates and higher dropout rates, with the number of filters fixed at 16."
+#| fig-width: 4.5
+#| fig-height: 4
 
 cnn_hpo_refined <- summarise_grid(readRDS(cnn_hpo_refined_file))
-cnn_hpo_refined
-```
-
-```{r}
-#| label: cnn-hpo-refined-plot
-
 plot_grid(cnn_hpo_refined)
 ```
 
 ```{r}
-#| label: cnn-hpo-selected
+#| label: tbl-cnn-hpo-refined
+#| tbl-cap: "Refined grid search results, from highest to lowest cross-validated (CV) accuracy."
+
+table_grid(cnn_hpo_refined)
+```
+
+#### Selected hyperparameters
+
+```{r}
+#| label: tbl-cnn-hpo-selected
+#| tbl-cap: "Selected hyperparameters: the combination with the highest cross-validated (CV) accuracy across both grids, trained for its one-SE number of epochs."
 
 # Best cross-validated combination across both grids, trained for its one-standard-error number of epochs
 cnn_hpo_selected <- bind_rows(coarse = cnn_hpo_coarse, refined = cnn_hpo_refined, .id = "grid") %>%
   slice_max(best_accuracy, n = 1, with_ties = FALSE)
-cnn_hpo_selected
+
+table_grid(cnn_hpo_selected)
 ```
 
 ```{r}
-#| label: cnn-hpo-selected-curve
+#| label: fig-cnn-hpo-epochs
+#| fig-cap: "Cross-validated accuracy (points) with one standard error either side (bars) after each epoch for the selected hyperparameters. The dashed line marks the best epoch and the solid line the one-SE epoch that was used."
+#| fig-width: 6
+#| fig-height: 3.5
 
 # Cross-validated accuracy (+/- one standard error) by epoch for the selected combination.
 # Dashed line: best epoch. Solid line: earliest epoch within one standard error of the best.
@@ -199,8 +228,12 @@ readRDS(if (cnn_hpo_selected$grid == "coarse") cnn_hpo_coarse_file else cnn_hpo_
   geom_point(colour = "red") +
   geom_vline(xintercept = cnn_hpo_selected$best_epoch, linetype = "dashed") +
   geom_vline(xintercept = cnn_hpo_selected$epoch_1se) +
-  labs(y = "Accuracy (cross-validation)")
+  scale_y_continuous(labels = scales::percent) +
+  labs(x = "Epoch", y = "Accuracy (cross-validation)") +
+  theme_minimal()
 ```
+
+#### Performance on the test session
 
 ```{r}
 #| label: cnn-hpo-test
@@ -225,20 +258,20 @@ saveRDS(as_tibble(handwriting$metadata[test_id,]) %>% mutate(predicted = y_test_
 ```
 
 ```{r}
-#| label: cnn-hpo-test-accuracy
+#| label: tbl-cnn-hpo-test
+#| tbl-cap: "Writer identification accuracy of the tuned CNN on the test session (session 5), overall and for each digit. The test session played no part in choosing the hyperparameters."
 
 cnn_hpo_test <- readRDS(cnn_hpo_test_file)
 
 # Test accuracy of the selected combination (for discussion only: nothing is chosen from this)
-cnn_hpo_test %>%
-  summarise(n = n(), accuracy = mean(person_id == predicted))
-```
-
-```{r}
-#| label: cnn-hpo-test-by-digit
-
-cnn_hpo_test %>%
-  group_by(digit) %>%
-  summarise(accuracy = mean(person_id == predicted)) %>%
-  arrange(desc(accuracy))
+bind_rows(
+  cnn_hpo_test %>%
+    group_by(digit = as.character(digit)) %>%
+    summarise(n = n(), accuracy = 100 * mean(person_id == predicted)) %>%
+    arrange(desc(accuracy)),
+  cnn_hpo_test %>%
+    summarise(digit = "All digits", n = n(), accuracy = 100 * mean(person_id == predicted))
+) %>%
+  knitr::kable(col.names = c("Digit", "Images", "Accuracy (%)"),
+               digits = 1, format.args = list(big.mark = ","), align = "lrr")
 ```
