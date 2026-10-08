@@ -1,18 +1,16 @@
 ## Writer verification with a Siamese network
 
-
 <!-- Task 3: contrastive or triplet loss; how training examples are constructed; matching performance. -->
 
-A Siamese network was trained on the handwriting images to evaluate how accurately it could capture whether two digits were written by the same writer. 
-To do so, we had to control for the digit identity by constructing pairs using the same digit. Therefore, a positive pair for this network consists of the same digit done by the same writer (but different images), and a negative pair is the same digit but a different writer. Examples of pairs from the training and validation datasets is shown in @fig-pairs.
+A Siamese neural network was trained on the handwriting images and evaluated to assess how accurately it could capture whether two digits were written by the same writer. We controlled for digit identity by constructing pairs consisting of the same digits. Therefore, a positive pair for this network consisted of two different images of the same digit written by the same person, and a negative pair contained two images of the same digit but by different writers. Examples of pairs from the training and validation datasets are shown in @fig-pairs. We employed a balanced pair sampling approach with half of the pairs being positive and the remaining half negative to ensure the Siamese network learned effectively [@chopra_2005].
 
-We conducted balanced sampling for the pairs, so that half of the pairs came from the same person and half different (check; rephrase).
+Here we used contrastive loss, a loss function introduced by @hadsell_2006, in the Siamese network. This loss function is more appropriate compared to triplet loss since the distinction between similar and dissimilar pairs is of interest rather than the relative ranking of dissimilarity of triplets. Additionally, this is a relatively simple verification task not a complex classification task like facial recognition, and the dataset is relatively small, thus the model should converge more easily using contrastive loss [@herman_2026]. The contrastive loss for a pair is:
 
-Contrastive loss was used - (do I need a justification?) - which introduces another hyperparameter for model tuning: the margin, $m$. The formula is:
 $$
 L = yD^2 + (1-y)\max(0,m-D)^2
 $$
-where $y = 1$ for a positive pair (same writer, same digit) and $D$ is the Euclidean distance between the embeddings. $m$ sets the distance at which embeddings for similar pairs results in zero loss (where the distance reaches the margin) versus embeddings for dissimilar pairs resulting in a large loss, thereby optimising the network to minimise differences between image pairs from the same writer and maximising differences between image pairs from different writers @ELARABY20221837. The margin for this initial Siamese network was set as 1 [following the notes], but was optimised in (ref section 5).
+where $y$ is a binary label with $y = 1$ for a positive pair (i.e. same writer, same digit) and $D$ is the Euclidean distance between the embeddings. The hyperparameter $m$ sets the distance at which embeddings for similar pairs results in zero loss (i.e. where the distance reaches the margin) versus embeddings for dissimilar pairs resulting in a large loss, thereby optimising the network to minimise differences between image pairs from the same writer and maximising differences between image pairs from different writers [@Elaraby_2023]. The margin for the initial Siamese network was set as one, but was optimised in a hyperparameter search in [Hyperparameter optimisation](#hyperparameter-optimisation). 
+
 
 The training/validation/test data splitting was done on writer-level to ensure that the network learns the writing style, or writer identity, and so that the generalisability of the model can be tested (accurately/with minimal leakage) with writers it hasn't seen in training or validation. However, since there are only 20 writers, a 60/20/20 split leaves only 4 writers for validation and testing independently, which is a significant limitation and is expanded in (ref section 4).
 
