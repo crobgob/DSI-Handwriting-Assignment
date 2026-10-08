@@ -31,6 +31,8 @@ source("R/prepData.R")
 
 {{< include sections/_05-hpo.qmd >}}
 
+{{< include sections/_05-cnn-hpo.qmd >}}
+
 {{< include sections/_06-comparison.qmd >}}
 
 {{< include sections/_07-conclusion.qmd >}}

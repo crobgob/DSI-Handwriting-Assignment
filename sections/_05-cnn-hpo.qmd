@@ -1,0 +1,277 @@
+### CNN hyperparameter search
+
+<!-- Task 5 (CNN part): coarse then refined grid search over learning rate, dropout and number of filters for the lecture model structure. 4-fold cross-validation over sessions 1-4. Session 5 is the test set and is only used once, for the selected combination. -->
+
+```{r}
+#| label: cnn-hpo-cache
+
+# After changing any of the training code, delete the files and render again.
+cnn_hpo_coarse_file <- "results/cnn_hpo_coarse.rds"
+cnn_hpo_refined_file <- "results/cnn_hpo_refined.rds"
+cnn_hpo_test_file <- "results/cnn_hpo_test.rds"
+cnn_hpo_run_coarse <- !file.exists(cnn_hpo_coarse_file)
+cnn_hpo_run_refined <- !file.exists(cnn_hpo_refined_file)
+cnn_hpo_run_test <- !file.exists(cnn_hpo_test_file)
+cnn_hpo_run_any <- cnn_hpo_run_coarse || cnn_hpo_run_refined || cnn_hpo_run_test
+```
+
+```{r}
+#| label: cnn-hpo-preprocess
+#| eval: !expr cnn_hpo_run_any
+
+# Scale pixel values to 0,1
+x <- handwriting$images / 255
+
+y <- to_categorical(handwriting$metadata$person_id - 1, 20) #needs classes numbered from 0
+```
+
+```{r}
+#| label: cnn-hpo-define
+#| eval: !expr cnn_hpo_run_any
+
+# Hyper-params:
+# the number of filters in both convolution layers, the dropout rate and the learning rate
+build_model <- function(filters, dropout, learning_rate) {
+  input <- layer_input(shape = c(28, 28, 1))
+
+  output <- input %>%
+    layer_conv_2d(filters = filters, kernel_size = c(3,3)) %>%
+    layer_activation('relu') %>%
+    layer_dropout(rate = dropout) %>%
+    layer_conv_2d(filters = filters, kernel_size = c(3,3), activation = "relu") %>%
+    layer_max_pooling_2d(pool_size = c(2, 2)) %>%
+    layer_flatten() %>%
+    layer_dense(units = 20, activation = 'softmax')
+
+  model <- keras_model(inputs = input, outputs = output)
+
+  model %>% compile(
+    loss = 'categorical_crossentropy',
+    optimizer = optimizer_adam(learning_rate = learning_rate),
+    metrics = c('accuracy'),
+  )
+
+  model
+}
+
+# 4-fold cross-validation by session over sessions 1-4 for every row of a grid.
+# No early stopping: every combination trains for the same number of epochs and the
+# validation accuracy is recorded after each epoch (batch size is fixed at 128).
+cv_grid <- function(grid, epochs) {
+  grid_history <- list()
+
+  for (i in 1:nrow(grid)) {
+    for (fold in 1:4) {
+      train_id <- which(handwriting$metadata$session <= 4 & handwriting$metadata$session != fold)
+      val_id <- which(handwriting$metadata$session == fold)
+
+      set_random_seed(67)
+      model <- build_model(grid$filters[i], grid$dropout[i], grid$learning_rate[i])
+
+      history <- model %>% fit(
+        x[train_id,,,,drop = FALSE], y[train_id,],
+        epochs = epochs, batch_size = 128,
+        validation_data = list(x[val_id,,,,drop = FALSE], y[val_id,]), shuffle = TRUE,
+        verbose = 0
+      )
+
+      grid_history[[paste(i, fold)]] <- tibble(
+        learning_rate = grid$learning_rate[i], dropout = grid$dropout[i], filters = grid$filters[i],
+        fold = fold, epoch = 1:epochs,
+        train = history$metrics$accuracy,
+        validation = history$metrics$val_accuracy)
+    }
+  }
+
+  bind_rows(grid_history)
+}
+```
+
+```{r}
+#| label: cnn-hpo-summarise
+
+# For every combination: the cross-validated accuracy (mean over the four folds) at each epoch,
+# the best epoch, and the earliest epoch within one standard error of the best (as in lambda.1se)
+summarise_grid <- function(grid_history) {
+  grid_history %>%
+    group_by(learning_rate, dropout, filters, epoch) %>%
+    summarise(cv_accuracy = mean(validation), cv_se = sd(validation) / sqrt(n()), .groups = "drop_last") %>%
+    mutate(best_epoch = epoch[which.max(cv_accuracy)],
+           best_accuracy = max(cv_accuracy),
+           best_se = cv_se[which.max(cv_accuracy)]) %>%
+    filter(cv_accuracy >= best_accuracy - best_se) %>%
+    slice_min(epoch, n = 1) %>%
+    ungroup() %>%
+    select(learning_rate, dropout, filters, best_epoch, best_accuracy, best_se,
+           epoch_1se = epoch, accuracy_1se = cv_accuracy) %>%
+    arrange(desc(best_accuracy))
+}
+
+# Learning rate on the x axis, one line per dropout rate, one panel per number of filters
+plot_grid <- function(grid_summary) {
+  ggplot(grid_summary, aes(x = learning_rate, y = best_accuracy, colour = factor(dropout))) +
+    geom_line() +
+    geom_point(size = 2) +
+    scale_x_log10(breaks = unique(grid_summary$learning_rate)) +
+    scale_y_continuous(labels = scales::percent) +
+    facet_wrap(~ filters, labeller = labeller(filters = function(f) paste("Filters:", f))) +
+    labs(x = "Learning rate", y = "Accuracy (cross-validation)", colour = "Dropout rate") +
+    theme_minimal() +
+    theme(legend.position = "top", axis.text.x = element_text(angle = 45, hjust = 1))
+}
+
+# A grid summary as a formatted table, with accuracies as percentages
+table_grid <- function(grid_summary) {
+  grid_summary %>%
+    mutate(learning_rate = format(learning_rate, scientific = FALSE, drop0trailing = TRUE),
+           across(c(best_accuracy, best_se, accuracy_1se), ~ 100 * .x)) %>%
+    select(learning_rate, dropout, filters, best_accuracy, best_se, best_epoch, epoch_1se, accuracy_1se) %>%
+    knitr::kable(col.names = c("Learning rate", "Dropout rate", "Filters", "Best CV accuracy (%)", "Standard error (%)",
+                               "Best epoch", "One-SE epoch", "CV accuracy at one-SE epoch (%)"),
+                 digits = 1, align = "r")
+}
+```
+
+#### Coarse grid
+
+```{r}
+#| label: cnn-hpo-coarse
+#| eval: !expr cnn_hpo_run_coarse
+
+# Coarse grid: 3 x 3 x 3 = 27 combinations, 20 epochs each
+cnn_hpo_coarse_grid <- expand_grid(learning_rate = c(0.0001, 0.001, 0.01),
+                                   dropout = c(0, 0.2, 0.5),
+                                   filters = c(8, 16, 32))
+
+dir.create("results", showWarnings = FALSE)
+saveRDS(cv_grid(cnn_hpo_coarse_grid, epochs = 20), cnn_hpo_coarse_file)
+```
+
+```{r}
+#| label: fig-cnn-hpo-coarse
+#| fig-cap: "Coarse grid search: best cross-validated accuracy of each combination of learning rate, dropout rate and number of filters (4-fold cross-validation over sessions 1-4)."
+#| fig-width: 7
+#| fig-height: 4
+
+cnn_hpo_coarse <- summarise_grid(readRDS(cnn_hpo_coarse_file))
+plot_grid(cnn_hpo_coarse)
+```
+
+```{r}
+#| label: tbl-cnn-hpo-coarse
+#| tbl-cap: "Coarse grid search results, from highest to lowest cross-validated (CV) accuracy. The one-SE epoch is the earliest epoch whose CV accuracy is within one standard error of the best epoch."
+
+table_grid(cnn_hpo_coarse)
+```
+
+#### Refined grid
+
+```{r}
+#| label: cnn-hpo-refined
+#| eval: !expr cnn_hpo_run_refined
+
+# Refined grid, centred on the best region of the coarse grid:
+#   the lowest learning rate and the highest dropout rate did best, so both are extended past the coarse grid;
+#   the number of filters made no consistent difference, so it is fixed at the 16 used in the lecture model.
+# Lower learning rates need longer to train, so each combination gets 40 epochs.
+cnn_hpo_refined_grid <- expand_grid(learning_rate = c(0.00003, 0.0001, 0.0003),
+                                    dropout = c(0.5, 0.65, 0.8),
+                                    filters = 16)
+
+saveRDS(cv_grid(cnn_hpo_refined_grid, epochs = 40), cnn_hpo_refined_file)
+```
+
+```{r}
+#| label: fig-cnn-hpo-refined
+#| fig-cap: "Refined grid search: best cross-validated accuracy for lower learning rates and higher dropout rates, with the number of filters fixed at 16."
+#| fig-width: 4.5
+#| fig-height: 4
+
+cnn_hpo_refined <- summarise_grid(readRDS(cnn_hpo_refined_file))
+plot_grid(cnn_hpo_refined)
+```
+
+```{r}
+#| label: tbl-cnn-hpo-refined
+#| tbl-cap: "Refined grid search results, from highest to lowest cross-validated (CV) accuracy."
+
+table_grid(cnn_hpo_refined)
+```
+
+#### Selected hyperparameters
+
+```{r}
+#| label: tbl-cnn-hpo-selected
+#| tbl-cap: "Selected hyperparameters: the combination with the highest cross-validated (CV) accuracy across both grids, trained for its one-SE number of epochs."
+
+# Best cross-validated combination across both grids, trained for its one-standard-error number of epochs
+cnn_hpo_selected <- bind_rows(coarse = cnn_hpo_coarse, refined = cnn_hpo_refined, .id = "grid") %>%
+  slice_max(best_accuracy, n = 1, with_ties = FALSE)
+
+table_grid(cnn_hpo_selected)
+```
+
+```{r}
+#| label: fig-cnn-hpo-epochs
+#| fig-cap: "Cross-validated accuracy (points) with one standard error either side (bars) after each epoch for the selected hyperparameters. The dashed line marks the best epoch and the solid line the one-SE epoch that was used."
+#| fig-width: 6
+#| fig-height: 3.5
+
+# Cross-validated accuracy (+/- one standard error) by epoch for the selected combination.
+# Dashed line: best epoch. Solid line: earliest epoch within one standard error of the best.
+readRDS(if (cnn_hpo_selected$grid == "coarse") cnn_hpo_coarse_file else cnn_hpo_refined_file) %>%
+  semi_join(cnn_hpo_selected, by = c("learning_rate", "dropout", "filters")) %>%
+  group_by(epoch) %>%
+  summarise(cv_accuracy = mean(validation), cv_se = sd(validation) / sqrt(n())) %>%
+  ggplot(aes(x = epoch, y = cv_accuracy)) +
+  geom_errorbar(aes(ymin = cv_accuracy - cv_se, ymax = cv_accuracy + cv_se), colour = "grey60", width = 0.3) +
+  geom_point(colour = "red") +
+  geom_vline(xintercept = cnn_hpo_selected$best_epoch, linetype = "dashed") +
+  geom_vline(xintercept = cnn_hpo_selected$epoch_1se) +
+  scale_y_continuous(labels = scales::percent) +
+  labs(x = "Epoch", y = "Accuracy (cross-validation)") +
+  theme_minimal()
+```
+
+#### Performance on the test session
+
+```{r}
+#| label: cnn-hpo-test
+#| eval: !expr cnn_hpo_run_test
+
+# Train the selected combination on sessions 1-4, then predict the test session once
+train_id <- which(handwriting$metadata$session <= 4)
+test_id <- which(handwriting$metadata$session == 5)
+
+set_random_seed(67)
+model <- build_model(cnn_hpo_selected$filters, cnn_hpo_selected$dropout, cnn_hpo_selected$learning_rate)
+
+model %>% fit(
+  x[train_id,,,,drop = FALSE], y[train_id,],
+  epochs = cnn_hpo_selected$epoch_1se, batch_size = 128,
+  shuffle = TRUE, verbose = 0
+)
+
+y_test_hat <- model %>% predict(x[test_id,,,,drop = FALSE], verbose = 0) %>% op_argmax(axis = 2) %>% as.numeric()
+
+saveRDS(as_tibble(handwriting$metadata[test_id,]) %>% mutate(predicted = y_test_hat), cnn_hpo_test_file)
+```
+
+```{r}
+#| label: tbl-cnn-hpo-test
+#| tbl-cap: "Writer identification accuracy of the tuned CNN on the test session (session 5), overall and for each digit. The test session played no part in choosing the hyperparameters."
+
+cnn_hpo_test <- readRDS(cnn_hpo_test_file)
+
+# Test accuracy of the selected combination (for discussion only: nothing is chosen from this)
+bind_rows(
+  cnn_hpo_test %>%
+    group_by(digit = as.character(digit)) %>%
+    summarise(n = n(), accuracy = 100 * mean(person_id == predicted)) %>%
+    arrange(desc(accuracy)),
+  cnn_hpo_test %>%
+    summarise(digit = "All digits", n = n(), accuracy = 100 * mean(person_id == predicted))
+) %>%
+  knitr::kable(col.names = c("Digit", "Images", "Accuracy (%)"),
+               digits = 1, format.args = list(big.mark = ","), align = "lrr")
+```

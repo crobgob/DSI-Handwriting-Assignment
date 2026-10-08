@@ -5,16 +5,19 @@
 ```{r}
 #| label: cnn-cache
 
-cnn_results_file <- "results/cnn_cv.rds"
+# After changing any of the training code, delete the file and render again.
+cnn_results_file <- "results/cnn_split.rds"
 cnn_retrain <- !file.exists(cnn_results_file)
 ```
 
 ```{r}
-#| label: cnn-setup
+#| label: cnn-split
 #| eval: !expr cnn_retrain
 
-library(keras3)
-use_backend("tensorflow")
+# Split by session: sessions 1-3 train, session 4 validation, session 5 test
+train_id <- which(handwriting$metadata$session <= 3)
+val_id <- which(handwriting$metadata$session == 4)
+test_id <- which(handwriting$metadata$session == 5)
 ```
 
 ```{r}
@@ -23,82 +26,74 @@ use_backend("tensorflow")
 
 # Scale pixel values to 0,1
 x <- handwriting$images / 255
+x_train <- x[train_id,,,,drop = FALSE]
+x_val <- x[val_id,,,,drop = FALSE]
+x_test <- x[test_id,,,,drop = FALSE]
 
-y <- to_categorical(handwriting$metadata$person_id - 1, 20) #needs classes numbered from 0
+y <- to_categorical(handwriting$metadata$person_id - 1, 20)
+y_train <- y[train_id,]
+y_val <- y[val_id,]
+y_test <- y[test_id,]
 ```
 
 ```{r}
 #| label: cnn-define
 #| eval: !expr cnn_retrain
 
-# Each fold needs a new model with fresh weights, so the model is built by a function
-build_cnn <- function() {
-  input <- layer_input(shape = c(28, 28, 1))
+set_random_seed(67)
 
-  # Ian's model structure taken from lecture slides
-  output <- input %>%
-    layer_conv_2d(filters = 16, kernel_size = c(3,3)) %>%
-    layer_activation('relu') %>%
-    layer_dropout(rate = 0.20) %>%
-    layer_conv_2d(filters = 16, kernel_size = c(3,3), activation = "relu") %>%
-    layer_max_pooling_2d(pool_size = c(2, 2)) %>%
-    layer_flatten() %>%
-    layer_dense(units = 20, activation = 'softmax')
+input <- layer_input(shape = c(28, 28, 1))
 
-  model <- keras_model(inputs = input, outputs = output)
+# from lecture slides
+output <- input %>%
+  layer_conv_2d(filters = 16, kernel_size = c(3,3)) %>%
+  layer_activation('relu') %>%
+  layer_dropout(rate = 0.20) %>%
+  layer_conv_2d(filters = 16, kernel_size = c(3,3), activation = "relu") %>%
+  layer_max_pooling_2d(pool_size = c(2, 2)) %>%
+  layer_flatten() %>%
+  layer_dense(units = 20, activation = 'softmax')
 
-  model %>% compile(
-    loss = 'categorical_crossentropy',
-    optimizer = optimizer_adam(learning_rate = 0.01),
-    metrics = c('accuracy'),
-  )
+model <- keras_model(inputs = input, outputs = output)
+cnn_summary <- capture.output(print(model))
 
-  model
-}
+model %>% compile(
+  loss = 'categorical_crossentropy',
+  optimizer = optimizer_adam(learning_rate = 0.01),
+  metrics = c('accuracy'),
+)
 ```
 
 ```{r}
 #| label: cnn-fit
 #| eval: !expr cnn_retrain
 
-# 5-fold cross-validation by session: train on four sessions, hold out the fifth
-cnn_epochs <- 5
-cnn_history <- list()
-cnn_predictions <- list()
-
-for (fold in 1:5) {
-  train_id <- which(handwriting$metadata$session != fold)
-  test_id <- which(handwriting$metadata$session == fold)
-
-  x_train <- x[train_id,,,,drop = FALSE]
-  y_train <- y[train_id,]
-  x_test <- x[test_id,,,,drop = FALSE]
-  y_test <- y[test_id,]
-
-  set_random_seed(67)
-  model <- build_cnn()
-
-  history <- model %>% fit(
-    x_train, y_train,
-    epochs = cnn_epochs, batch_size = 8192,
-    validation_data = list(x_test, y_test), shuffle = TRUE,
-    verbose = 0
+# Stop when accuracy on the validation session has not improved for 10 epochs,
+# and go back to the weights from the best epoch
+history <- model %>% fit(
+  x_train, y_train,
+  epochs = 100, batch_size = 8192,
+  validation_data = list(x_val, y_val), shuffle = TRUE,
+  verbose = 0,
+  callbacks = list(
+    callback_early_stopping(monitor = "val_accuracy", patience = 10,
+                            restore_best_weights = TRUE)
   )
+)
 
-  y_test_hat <- model %>% predict(x_test, verbose = 0) %>% op_argmax(axis = 2) %>% as.numeric()
-
-  cnn_history[[fold]] <- tibble(fold = fold, epoch = 1:cnn_epochs,
-                                train = history$metrics$accuracy,
-                                held_out = history$metrics$val_accuracy)
-  cnn_predictions[[fold]] <- as_tibble(handwriting$metadata[test_id,]) %>%
-    mutate(fold = fold, predicted = y_test_hat)
-}
+# Predictions for the validation and test sessions (op_argmax counts from 1, so this is the person_id)
+y_val_hat <- model %>% predict(x_val, verbose = 0) %>% op_argmax(axis = 2) %>% as.numeric()
+y_test_hat <- model %>% predict(x_test, verbose = 0) %>% op_argmax(axis = 2) %>% as.numeric()
 
 # Save everything the rest of this section needs
 dir.create("results", showWarnings = FALSE)
-saveRDS(list(summary = capture.output(print(build_cnn())), # untrained copy, so only the model's own parameters are counted
-             history = bind_rows(cnn_history),
-             predictions = bind_rows(cnn_predictions)),
+saveRDS(list(summary = cnn_summary,
+             history = tibble(epoch = seq_along(history$metrics$accuracy),
+                              train = history$metrics$accuracy,
+                              validation = history$metrics$val_accuracy),
+             predictions = bind_rows(
+               as_tibble(handwriting$metadata[val_id,]) %>% mutate(set = "validation", predicted = y_val_hat),
+               as_tibble(handwriting$metadata[test_id,]) %>% mutate(set = "test", predicted = y_test_hat))),
         cnn_results_file)
 ```
 
@@ -106,52 +101,84 @@ saveRDS(list(summary = capture.output(print(build_cnn())), # untrained copy, so 
 #| label: cnn-load
 
 cnn_results <- readRDS(cnn_results_file)
+cnn_test <- cnn_results$predictions %>% filter(set == "test")
 ```
 
-```{r}
-#| label: cnn-summary
+### Model structure
 
-cat(cnn_results$summary, sep = "\n")
+```{r}
+#| label: tbl-cnn-structure
+#| tbl-cap: "Layers of the CNN used for writer identification, with the shape of each layer's output and its number of trainable parameters."
+
+# The saved Keras summary is text: keep the rows of its table and split them into columns
+cnn_layers <- cnn_results$summary %>%
+  str_subset("^│") %>%
+  str_split_fixed("│", 5)
+
+tibble(layer = str_trim(cnn_layers[, 2]),
+       output_shape = str_trim(cnn_layers[, 3]),
+       parameters = suppressWarnings(as.numeric(str_remove_all(cnn_layers[, 4], "[, ]")))) %>%
+  filter(!is.na(parameters)) %>% # drops the header row of the Keras summary
+  add_row(layer = "Total", output_shape = "", parameters = sum(.$parameters)) %>%
+  knitr::kable(col.names = c("Layer (type)", "Output shape", "Parameters"),
+               format.args = list(big.mark = ","), align = "llr")
 ```
 
-```{r}
-#| label: cnn-history
+### Training
 
-# One line per fold
+```{r}
+#| label: fig-cnn-history
+#| fig-cap: "Accuracy of the CNN after each epoch on the training sessions (1-3) and the validation session (4). Training stopped once validation accuracy had not improved for 10 epochs."
+#| fig-width: 6
+#| fig-height: 3.5
+
 cnn_results$history %>%
-  pivot_longer(c(train, held_out), names_to = "data", values_to = "accuracy") %>%
-  ggplot(aes(x = epoch, y = accuracy, colour = data, group = interaction(data, fold))) +
+  pivot_longer(c(train, validation), names_to = "data", values_to = "accuracy") %>%
+  mutate(data = recode(data, train = "Training (sessions 1-3)", validation = "Validation (session 4)")) %>%
+  ggplot(aes(x = epoch, y = accuracy, colour = data)) +
   geom_line() +
-  ylim(0, 1)
+  scale_y_continuous(limits = c(0, 1), labels = scales::percent) +
+  labs(x = "Epoch", y = "Accuracy", colour = NULL) +
+  theme_minimal() +
+  theme(legend.position = "top")
 ```
 
-```{r}
-#| label: cnn-evaluate
-
-# Accuracy on the held-out session of each fold
-cnn_folds <- cnn_results$predictions %>%
-  group_by(fold) %>%
-  summarise(n = n(), accuracy = mean(person_id == predicted))
-cnn_folds
-
-# Cross-validated accuracy
-cnn_folds %>% summarise(mean_accuracy = mean(accuracy), sd_accuracy = sd(accuracy))
-```
+### Writer identification performance
 
 ```{r}
-#| label: cnn-confusion
-
-# Every image is predicted once, by the model that did not see its session
-y_test_original <- cnn_results$predictions$person_id
-y_test_hat <- cnn_results$predictions$predicted
-table(y_test_original, y_test_hat)
-```
-
-```{r}
-#| label: cnn-by-digit
+#| label: tbl-cnn-accuracy
+#| tbl-cap: "Overall writer identification accuracy of the CNN on the validation session (used for early stopping) and on the untouched test session."
 
 cnn_results$predictions %>%
-  group_by(digit, person_id) %>%
-  summarise(accuracy = mean(person_id == predicted)) %>%
-  arrange(desc(accuracy))
+  mutate(set = factor(set, levels = c("validation", "test"),
+                      labels = c("Validation (session 4)", "Test (session 5)"))) %>%
+  group_by(set) %>%
+  summarise(n = n(), accuracy = 100 * mean(person_id == predicted)) %>%
+  knitr::kable(col.names = c("Set", "Images", "Accuracy (%)"),
+               digits = 1, format.args = list(big.mark = ","), align = "lrr")
+```
+
+```{r}
+#| label: tbl-cnn-by-digit
+#| tbl-cap: "Writer identification accuracy of the CNN on the test session for each digit, from most to least accurate."
+
+cnn_test %>%
+  group_by(digit) %>%
+  summarise(n = n(), accuracy = 100 * mean(person_id == predicted)) %>%
+  arrange(desc(accuracy)) %>%
+  knitr::kable(col.names = c("Digit", "Images", "Accuracy (%)"),
+               digits = 1, format.args = list(big.mark = ","), align = "lrr")
+```
+
+```{r}
+#| label: tbl-cnn-confusion
+#| tbl-cap: "Confusion matrix of the CNN on the test session. Rows are the true writer and columns the predicted writer; each writer has 250 test images."
+
+y_test_original <- factor(cnn_test$person_id, levels = 1:20)
+y_test_hat <- factor(cnn_test$predicted, levels = 1:20)
+
+table(y_test_original, y_test_hat) %>%
+  as.data.frame.matrix() %>%
+  rownames_to_column("True writer") %>%
+  knitr::kable(align = "r")
 ```
