@@ -5,6 +5,7 @@ author:
   - Corey Webb
   - Shirley Knight
   - Jess Prevost
+bibliography: dsfi_a2.bib
 execute:
   warning: false
   message: false
