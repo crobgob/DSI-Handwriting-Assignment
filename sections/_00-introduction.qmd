@@ -1,3 +1,12 @@
 ## Introduction
 
 <!-- Problem background and overview of the approach. -->
+
+Don't repeat other sections 
+
+Define CNNs and why useful for this task (person identification from handwriting) and potential applications:
+"Which of a given set of people was this written by?"
+
+Define Siamese networks and why useful for this task (handwriting matching) and potential applications (eg. signature identification [@herman_2026])
+"Is this written by the same person?"
+Siamese networks sends two images through an identical CNN and maps each to an embedding (a type of vector). The distance between the two embeddings is calculated and used in the loss function which encourages similar images to have embeddings close together and unrelated images to be further apart.
