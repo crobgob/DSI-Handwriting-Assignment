@@ -25,15 +25,6 @@ The generalisability of our model was evaluated by predicting on unseen writers'
 
 
 ```{r readdata}
-
-handwriting <- readRDS("../data/handwriting.rds")
-#head(handwriting$metadata)
-
-library(keras3)
-use_backend("tensorflow")
-
-# images is an integer array with values from 0 (background) to 255 (ink).
-
 # below = x in e.g.
 x <- handwriting$images / 255 # scale the pixels to 0-1
 #dim(handwriting$images) # 25000 x 28 x 28 x 1 - 1 = number of image channels (greyscale = 1)
