@@ -1,3 +1,146 @@
-## Hyperparameter optimisation
+### Siamese network hyperparameter search
 
-<!-- Task 5: limited search for the CNN and/or Siamese model; sensitivity of the evaluation measures. -->
+<!-- Task 5 (Siamese part): coarse then refined grid search over learning rate, dropout and number of filters for the lecture model structure. 4-fold cross-validation over sessions 1-4. Session 5 is the test set and is only used once, for the selected combination. -->
+
+```{r}
+set.seed(25)
+
+# ------------- MAYBE PUT THIS ALL INTO R SCRIPT ?
+x <- handwriting$images / 255 # scale the pixels to 0-1
+y_person <- handwriting$metadata$person_id - 1L 
+writers <- unique(handwriting$metadata$person_id - 1L)
+train_writers <- sample(writers, 0.6*length(writers))
+
+rest_writers <- setdiff(writers, train_writers)
+valid_writers <- sample(rest_writers, 0.5*length(rest_writers))
+test_writers <- setdiff(rest_writers, valid_writers)
+
+# now extract the image IDs belonging to each split
+train_ids <- which(handwriting$metadata$person_id %in% train_writers)
+valid_ids <- which(handwriting$metadata$person_id %in% valid_writers)
+test_ids <- which(handwriting$metadata$person_id %in% test_writers)
+
+# now make the image index pairs in each split
+train_pairs <- make_pairs(train_ids, length(train_ids), handwriting$metadata)
+valid_pairs <- make_pairs(valid_ids, length(valid_ids), handwriting$metadata)
+test_pairs <- make_pairs(test_ids, length(test_ids), handwriting$metadata)
+
+# for each pair, extract the image + 0/1
+train <- make_batch(train_pairs)
+valid <- make_batch(valid_pairs)
+test  <- make_batch(test_pairs)
+# -------------
+# Functions needed
+balanced_accuracy_at <- function(cut) {
+    predicts_same <- valid_distance < cut
+    same_rate <- mean(predicts_same[valid_same])
+    different_rate <- mean(!predicts_same[!valid_same])
+    (same_rate + different_rate) / 2
+  }
+```
+
+```{r}
+
+#function(learning_rate, epochs, batch_size, m)
+
+build_snn <- function(m) {
+
+  image <- layer_input(shape = c(28, 28, 1)) # each image = 28x28, 1 image channel
+  
+  z <- image |>
+    layer_conv_2d(16, 3, activation = "relu") |> # learns useful features (shapes, strokes)
+    layer_max_pooling_2d(2) |> # makes feature maps smaller while keeping important info
+    layer_conv_2d(32, 3, activation = "relu") |>
+    layer_global_average_pooling_2d() |> # converts feature maps -> single vector of numbers
+    layer_dense(16) # converts to 16-no embedding representing the handwriting style
+  
+  encoder <- keras_model(image, z)
+  
+  
+  a <- layer_input(shape = c(28, 28, 1))
+  b <- layer_input(shape = c(28, 28, 1))
+  
+  distance <- list(encoder(a), encoder(b)) |>
+    layer_lambda(f = function(z) {
+      op_sqrt(op_sum(op_square(z[[1]] - z[[2]]), 
+                     axis = 2, # sum over embedding dimension
+                     keepdims = TRUE) + 
+                1e-7) # makes sure it's not 0
+    })
+  
+  model <- keras_model(list(a, b), distance)
+  
+  contrastive_loss <- function(y, d) {
+    op_mean( # finds avg loss across all pairs in a batch
+      y * op_square(d) + # squares each pair's distance - for same-writer pairs, penalises a large distance
+        (1 - y) * op_square(op_maximum(m - d, 0))) # for diff writer pairs, penalises only if distance is < 1: if dist >=1, penalty is 0
+}
+
+  model |> compile(
+    optimizer = optimizer_adam(learning_rate = 1e-3),
+    loss = contrastive_loss
+  )
+  
+  model |> fit(
+    list(train$left, train$right), train$y,
+    validation_data = list(
+      list(valid$left, valid$right), valid$y
+    ),
+    epochs = 5,
+    batch_size = 64,
+    verbose=0
+  )
+  
+  valid_distance <- as.numeric(predict(model, list(valid$left, valid$right), verbose = 0))
+  valid_same <- as.logical(valid$y[, 1])
+  
+  threshold_candidates <- sort(unique(valid_distance))
+  threshold_scores <- vapply(threshold_candidates, balanced_accuracy_at, numeric(1))
+  best_index <- which.max(threshold_scores)
+  threshold <- threshold_candidates[best_index]
+  
+  test_distance <- as.numeric(predict(
+    model, list(test$left, test$right), verbose =0))
+  
+  true_same <- as.logical(test$y[, 1]) # real answer if same/diff writer
+  predicted_same <- test_distance < threshold # uses model distance & best threshold 
+
+confusion_matrix <- table(
+  Actual = factor(true_same,
+                  levels = c(FALSE, TRUE),
+                  labels = c("Different writer", "Same writer")),
+  Predicted = factor(predicted_same,
+                     levels = c(FALSE, TRUE),
+                     labels = c("Different writer", "Same writer"))
+)
+
+  TN <- confusion_matrix["Different writer", "Different writer"]
+  FP <- confusion_matrix["Different writer", "Same writer"]
+  FN <- confusion_matrix["Same writer", "Different writer"]
+  TP <- confusion_matrix["Same writer", "Same writer"]
+  
+  # Performance metrics
+  accuracy <- (TP + TN) / sum(confusion_matrix)
+  precision <- TP / (TP + FP)
+  recall <- TP / (TP + FN)
+  specificity <- TN / (TN + FP)
+  
+  results <- data.frame(
+    Metric = c("Accuracy", "Precision", "Recall", "Specificity"),
+    Value = c(accuracy, precision, recall, specificity)
+  )
+  
+  return(results)
+  
+}
+
+i <- 1
+snn <- vector(mode = "list", length = 5)
+for (m in c(0.8, 0.9, 1, 1.1, 1.2)) {
+  snn[[i]] <- build_snn(m)
+  i <- i + 1
+}
+
+snn
+```
+
