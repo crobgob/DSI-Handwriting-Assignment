@@ -1,10 +1,40 @@
 ## Writer verification with a Siamese network
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  echo = FALSE,       # Show code by default
+  message = FALSE,   # Suppress package startup messages globally
+  warning = FALSE,   # Suppress warnings globally
+  fig.align = "center" 
+)
+```
+
 
 <!-- Task 3: contrastive or triplet loss; how training examples are constructed; matching performance. -->
-### Build a Siamese network that estimates whether two images were written by the same person. Use contrastive loss or triplet loss. Explain how you construct training examples and evaluate matching performance.
+
+A Siamese network was trained on the handwriting images to evaluate how accurately it could capture whether two digits were written by the same writer. 
+To do so, we had to control for the digit identity by constructing pairs using the same digit. Therefore, a positive pair for this network consists of the same digit done by the same writer (but different images), and a negative pair is the same digit but a different writer. Examples of pairs from the training and validation datasets is shown in @fig-pairs.
+
+We conducted balanced sampling for the pairs, so that half of the pairs came from the same person and half different (check; rephrase).
+
+Contrastive loss was used - (do I need a justification?) - which introduces another hyperparameter for model tuning: the margin, $m$. The formula is:
+$$
+L = yD^2 + (1-y)\max(0,m-D)^2
+$$
+where $y = 1$ for a positive pair (same writer, same digit) and $D$ is the Euclidean distance between the embeddings. $m$ sets the distance at which embeddings for similar pairs results in zero loss (where the distance reaches the margin) versus embeddings for dissimilar pairs resulting in a large loss, thereby optimising the network to minimise differences between image pairs from the same writer and maximising differences between image pairs from different writers @ELARABY20221837. The margin for this initial Siamese network was set as 1 [following the notes], but was optimised in (ref section 5).
+
+The training/validation/test data splitting was done on writer-level to ensure that the network learns the writing style, or writer identity, and so that the generalisability of the model can be tested (accurately/with minimal leakage) with writers it hasn't seen in training or validation. However, since there are only 20 writers, a 60/20/20 split leaves only 4 writers for validation and testing independently, which is a significant limitation and is expanded in (ref section 4).
+
+The encoder architecture was set as a simple CNN with two convolutional layers, max pooling and global pooling...
+[because the input images are low-resolution and contain (easily learnable) features like curves and strokes] 
+
+The Siamese model outputs distances between the two embeddings for each digit pair, which is then turned into a classification of "same" or "different" writer using a threshold determined by the validation pairs [also a limitation with the few writers & the split we have]. We compared the balanced accuracy for actual same and different digit pairs at different thresholds, and chose the threshold with the maximised balanced accuracy. 
+
+The generalisability of our model was evaluated by predicting on unseen writers' digit image-pairs. The results are shown in @tab-confusionmat and @tab-testresults. @fig-test-results shows the test batch's predicted and true results
+
 
 ```{r readdata}
-handwriting <- readRDS("data/handwriting.rds")
+
+handwriting <- readRDS("../data/handwriting.rds")
 #head(handwriting$metadata)
 
 library(keras3)
@@ -24,12 +54,6 @@ y_person <- handwriting$metadata$person_id - 1L # subtracts 1 from every value i
 
 set.seed(25)
 ```
-
-We want to evaluate whether two images were written by the same writer. Therefore,
-we must control for the digit identity i.e., construct pairs using the same digit
-to force the NN to learn the writing style (the writer identity).
-(Positive pair: same writer + same digit; Negative pair: diff writer + same digit).
-
 
 
 ```{r makepairs}
@@ -73,9 +97,6 @@ make_pairs <- function(ids, # indices of images it can use
 
 ```
 
-From make_pairs() (which creates the two image indices; pair-index matrix), we 
-must extract the actual images + the target y (0 if diff writer, 1 if same), 
-using make_batch().
 
 ```{r makebatch}
 
@@ -98,12 +119,6 @@ make_batch <- function(p, # pairs created by make_pairs()
 
 ```
 
-Training/validation/test split has to be done by writer, so that we can test the
-generalisability of the model by evaluating its performance on writers it truly 
-hasn't seen before.
-Limitation - only 20 writers.
-
-We decided on a 60/30/10 split? - CHANGED to 60/20/20
 
 
 ```{r datasplit}
@@ -133,7 +148,37 @@ valid <- make_batch(valid_pairs)
 test  <- make_batch(test_pairs)
 ```
 
-Build the shared encoder:
+Images of pairs: 
+
+```{r}
+#| label: fig-pairs
+#| fig-cap: "Example training and validation pairs. Top row: training pairs (same writer left, different writer right). Bottom row: validation pairs (same writer left, different writer right)."
+#| fig-width: 8
+#| fig-height: 4
+
+par(mfrow = c(2, 4), mar = c(1, 1, 2, 1))
+
+show_pair <- function(pair_idx, pairs, label) {
+  img1 <- x[pairs[pair_idx, 1], , , 1]
+  img2 <- x[pairs[pair_idx, 2], , , 1]
+  image(t(img1[nrow(img1):1, ]), col = grey(seq(1, 0, length = 256)),
+        axes = FALSE, main = label)
+  image(t(img2[nrow(img2):1, ]), col = grey(seq(1, 0, length = 256)),
+        axes = FALSE, main = "")
+}
+
+pos_train <- which(train$y[, 1] == 1)
+neg_train <- which(train$y[, 1] == 0)
+pos_valid <- which(valid$y[, 1] == 1)
+neg_valid <- which(valid$y[, 1] == 0)
+
+show_pair(pos_train[1], train_pairs, "Train: same writer")
+show_pair(neg_train[1], train_pairs, "Train: different writer")
+show_pair(pos_valid[1], valid_pairs, "Val: same writer")
+show_pair(neg_valid[1], valid_pairs, "Val: different writer")
+```
+
+
 ```{r encoderbuild}
 
 image <- layer_input(shape = c(28, 28, 1)) # each image = 28x28, 1 image channel
@@ -149,7 +194,6 @@ encoder <- keras_model(image, z)
 # NOTHING HAS BEEN CHANGED FOR THE ABOVE FROM THE NOTES -- CHANGE IF WANTED
 ```
 
-Build the Siamese model:
 ```{r siamesebuild}
 # a & b = describes pair of images supplied to model
 a <- layer_input(shape = c(28, 28, 1))
@@ -169,13 +213,6 @@ distance <- list(encoder(a), encoder(b)) |>
 model <- keras_model(list(a, b), distance)
 ```
 
-Choice of loss - contrastive loss. 
-(Since this function works with pairs of images, which is how our data is already 
-organised, this is a natural/simple choice for evaluating pairwise whether the 
-digit was computed by the same or different writer) -- change.
-
-Loss func = 1 for same-writer pair, 0 for diff-writer pair.
-("The loss makes same-writer images move closer together and different-writer images move at least 1 unit apart.")
 
 ```{r constrastiveloss}
 
@@ -187,7 +224,6 @@ contrastive_loss <- function(y, d) {
 
 ```
 
-Compile model: (only train + validation data)
 ```{r compile}
 model |> compile(
   optimizer = optimizer_adam(1e-3),
@@ -200,16 +236,14 @@ model |> fit(
     list(valid$left, valid$right), valid$y
   ),
   epochs = 5,
-  batch_size = 64
+  batch_size = 64,
+  verbose=0
 )
 ```
 
-Now we must select a threshold at which below = same and above = different.
-To do this, we look at validation pairs and compute the accuracy "for actual same pairs and actual different pairs, then average those two rates. The balanced accuracy metric gives both kinds of pair equal weight." [notes]
-
 ```{r valid_dist}
 
-valid_distance <- as.numeric(predict(model, list(valid$left, valid$right)))
+valid_distance <- as.numeric(predict(model, list(valid$left, valid$right), verbose = 0))
 valid_same <- as.logical(valid$y[, 1])
 
 balanced_accuracy_at <- function(cut) {
@@ -219,49 +253,110 @@ balanced_accuracy_at <- function(cut) {
   (same_rate + different_rate) / 2
 }
 
-example_thresholds <- unique(as.numeric(
-  quantile(valid_distance, c(.25, .5, .75))
-))
-data.frame(
-  threshold = example_thresholds,
-  balanced_accuracy = vapply(example_thresholds, balanced_accuracy_at, numeric(1))
-)
+#example_thresholds <- unique(as.numeric(
+#  quantile(valid_distance, c(.25, .5, .75))
+#))
+#data.frame(
+#  threshold = example_thresholds,
+#  balanced_accuracy = vapply(example_thresholds, balanced_accuracy_at, numeric(1))
+#)
 
 threshold_candidates <- sort(unique(valid_distance))
 threshold_scores <- vapply(threshold_candidates, balanced_accuracy_at, numeric(1))
 best_index <- which.max(threshold_scores)
 threshold <- threshold_candidates[best_index]
+
 data.frame(threshold = threshold, balanced_accuracy = threshold_scores[best_index])
 ```
 
 
 Test: -- change below !!
 ```{r}
-# already done i think
-#x_test <- array(test$x[1:1000,,] / 255, c(1000, 28, 28, 1))
-#labels_test <- mnist$test$y[1:1000]
-#test_pairs <- make_batch(
-#  make_pairs(1:1000, 600, class_labels = labels_test),
-#  images = x_test,
-#  class_labels = labels_test
-#)
+#| label: tab-confusionmat
 
 test_distance <- as.numeric(predict(
-  model, list(test$left, test$right)
-))
+  model, list(test$left, test$right), verbose =0))
 
 true_same <- as.logical(test$y[, 1]) # real answer if same/diff writer
 predicted_same <- test_distance < threshold # uses model distance & best threshold 
-case <- ifelse(true_same,
-               ifelse(predicted_same, "Correct: same", "Incorrect: different"),
-               ifelse(predicted_same, "Incorrect: same", "Correct: different"))
 
-table(case)
 
 # confusion matrix
-table(
-  Actual = true_same,
-  Predicted = predicted_same
+confusion_matrix <- table(
+  Actual = factor(true_same,
+                  levels = c(FALSE, TRUE),
+                  labels = c("Different writer", "Same writer")),
+  Predicted = factor(predicted_same,
+                     levels = c(FALSE, TRUE),
+                     labels = c("Different writer", "Same writer"))
 )
+
+confusion_matrix
+```
+
+
+```{r}
+#| label: tab-testresults
+
+
+# extract values from confusion matrix
+TN <- confusion_matrix["Different writer", "Different writer"]
+FP <- confusion_matrix["Different writer", "Same writer"]
+FN <- confusion_matrix["Same writer", "Different writer"]
+TP <- confusion_matrix["Same writer", "Same writer"]
+
+# Performance metrics
+accuracy <- (TP + TN) / sum(confusion_matrix)
+precision <- TP / (TP + FP)
+recall <- TP / (TP + FN)
+specificity <- TN / (TN + FP)
+
+results <- data.frame(
+  Metric = c("Accuracy", "Precision", "Recall", "Specificity"),
+  Value = c(accuracy, precision, recall, specificity)
+)
+
+results$Value <- sprintf("%.1f%%", results$Value * 100)
+
+results
+```
+
+```{r}
+#| label: fig-test-results
+#| fig-cap: "Sample test pairs with true label, predicted label, and distance score. Green border = correct prediction, red = incorrect."
+#| fig-width: 10
+#| fig-height: 6
+
+set.seed(42)
+n_show <- 8
+sample_idx <- sample(seq_len(nrow(test_pairs)), n_show)
+
+par(mfrow = c(2, n_show), mar = c(0.5, 0.5, 2.5, 0.5))
+
+for (i in sample_idx) {
+  img1 <- x[test_pairs[i, 1], , , 1]
+  img2 <- x[test_pairs[i, 2], , , 1]
+  
+  true_label   <- ifelse(test$y[i, 1] == 1, "Same", "Different")
+  pred_label   <- ifelse(test_distance[i] < threshold, "Same", "Different")
+  correct      <- true_label == pred_label
+  border_col   <- ifelse(correct, "forestgreen", "red3")
+  score        <- round(test_distance[i], 3)
+  
+  title_text <- paste0(
+    "True: ", true_label, ",", " Pred: ", pred_label, "\nd=", score
+  )
+  
+  # left image
+  image(t(img1[nrow(img1):1, ]), col = grey(seq(1, 0, length = 256)),
+        axes = FALSE, main = title_text,
+        cex.main = 0.75)
+  box(col = border_col, lwd = 2)
+  
+  # right image
+  image(t(img2[nrow(img2):1, ]), col = grey(seq(1, 0, length = 256)),
+        axes = FALSE, main = "")
+  box(col = border_col, lwd = 2)
+}
 ```
 
