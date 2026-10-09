@@ -1,3 +1,150 @@
-## Hyperparameter optimisation
+### Siamese network hyperparameter search
 
-<!-- Task 5: limited search for the CNN and/or Siamese model; sensitivity of the evaluation measures. -->
+<!-- Task 5 (Siamese part): grid search over m, learning rate, filters, and number of epochs trained using validation data to decide on final model. -->
+
+```{r}
+#| label: snn-hpo-cache
+
+# After changing any of the training code, delete the files and render again.
+snn_hpo_file <- "results/snn_hpo.rds"
+snn_hpo_run <- !file.exists(snn_hpo_file)
+
+```
+
+```{r}
+#| label: snn-hpo-define
+#| eval: !expr snn_hpo_run
+
+# Function to define Siamese network with variable hyperparameters and calculate balanced accuracy from validation data 
+build_snn <- function(m, learning_rate, epochs) {
+
+  image <- layer_input(shape = c(28, 28, 1)) # each image = 28x28, 1 image channel
+  
+  z <- image |>
+    layer_conv_2d(16, kernel_size = c(3,3), activation = "relu") |> # learns useful features (shapes, strokes)
+    layer_max_pooling_2d(2) |> # makes feature maps smaller while keeping important info
+    layer_conv_2d(32, kernel_size = c(3,3), activation = "relu") |>
+    layer_global_average_pooling_2d() |> # converts feature maps -> single vector of numbers
+    layer_dense(16) # converts to 16-no embedding representing the handwriting style
+  
+  encoder <- keras_model(image, z)
+  
+  
+  a <- layer_input(shape = c(28, 28, 1))
+  b <- layer_input(shape = c(28, 28, 1))
+  
+  distance <- list(encoder(a), encoder(b)) |>
+    layer_lambda(f = function(z) {
+      op_sqrt(op_sum(op_square(z[[1]] - z[[2]]), 
+                     axis = 2, # sum over embedding dimension
+                     keepdims = TRUE) + 
+                1e-7) # makes sure it's not 0
+    })
+  
+  model <- keras_model(list(a, b), distance)
+  
+  contrastive_loss <- function(y, d) {
+    op_mean( # finds avg loss across all pairs in a batch
+      y * op_square(d) + # squares each pair's distance - for same-writer pairs, penalises a large distance
+        (1 - y) * op_square(op_maximum(m - d, 0))) # for diff writer pairs, penalises only if distance is < 1: if dist >=1, penalty is 0
+}
+
+  model |> compile(
+    optimizer = optimizer_adam(learning_rate = learning_rate),
+    loss = contrastive_loss
+  )
+  
+  model |> fit(
+    list(train$left, train$right), train$y,
+    validation_data = list(
+      list(valid$left, valid$right), valid$y
+    ),
+    epochs = epochs,
+    batch_size = 1000,
+    verbose=0
+  )
+  
+  valid_distance <- as.numeric(predict(model, list(valid$left, valid$right), verbose = 0))
+  valid_same <- as.logical(valid$y[, 1])
+  
+  # Function to calculate balanced accuracy at different thresholds
+balanced_accuracy_at <- function(cut) {
+  predicts_same <- valid_distance < cut # at given threshold (cut) would model predict same or different?
+  same_rate <- mean(predicts_same[valid_same]) # accuracy for "same" pairs
+  different_rate <- mean(!predicts_same[!valid_same]) # accuracy for "different" pairs
+  (same_rate + different_rate) / 2 # mean accuracy for "same" and "different" ("alanced accuracy)
+}
+
+  threshold_candidates <- sort(unique(valid_distance))
+  threshold_scores <- vapply(threshold_candidates, balanced_accuracy_at, numeric(1))
+  best_index <- which.max(threshold_scores)
+  threshold <- threshold_candidates[best_index]
+  balanced_accuracy <- threshold_scores[best_index]
+  
+  return(balanced_accuracy)
+  
+}
+
+# Function to fit multiple iterations of Siamese network from grid of hyperparameters (grid search)
+build_snn_grid <- function(grid) {
+  
+  snn_grid <- list() # initialise list to store results
+  
+  for (i in 1:nrow(grid)) { # iterate over hyperparameter combinations
+    
+    set.seed(25) # reproducibility
+    
+    # fit models
+    snn <- build_snn(grid$m_values[i], grid$lr_values[i], grid$epochs[i]) 
+    
+    # fill list with results
+    snn_grid[[paste(i)]] <- tibble(m = grid$m_values[i], 
+                                   learning_rate = grid$lr_values[i], 
+                                   #filters = grid$filters[i], 
+                                   epochs = grid$epochs[i], 
+                                   balanced_accuracy = snn)
+    }
+  bind_rows(snn_grid) # final results
+}
+```
+
+```{r}
+#| label: snn-hpo-fit
+#| eval: !expr snn_hpo_run
+
+# Define hyperparameter combinations
+snn_hpo_coarse_grid <- expand_grid(#m_values = c(1, 2),
+                                   m_values = c(0.5, 1, 1.5, 2, 2.5),
+                                   lr_values = c(0.0001, 0.001, 0.01),
+                                   #filters = c(8, 16, 32),
+                                   #epochs = 5)
+                                   epochs = c(5, 10, 20))
+
+# Grid search 
+snn_course_grid_results <- build_snn_grid(snn_hpo_coarse_grid)
+
+# Save object
+saveRDS(snn_course_grid_results, snn_hpo_file)
+
+```
+
+```{r}
+#| label: fig-snn-hpo
+#| fig-cap: "Balanced accuracy for grid search of hyperparameters for Siamese network."
+#| fig-width: 6
+#| fig-height: 3.5
+
+# Plot results
+readRDS(snn_hpo_file) %>%
+  ggplot(aes(x = learning_rate, y = balanced_accuracy, colour = factor(m))) +
+  geom_line() +
+  geom_point(size = 2) +
+  scale_x_log10(breaks = unique(readRDS(snn_hpo_file)$learning_rate)) +
+  scale_y_continuous(labels = scales::percent) +
+  facet_wrap(~ epochs) +
+  labs(x = "Learning rate", y = "Accuracy (validation)", colour = "m") +
+  theme_minimal() +
+  theme(legend.position = "top", axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+

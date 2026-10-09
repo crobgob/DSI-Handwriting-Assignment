@@ -4,128 +4,6 @@
 
 A Siamese neural network was trained on the handwriting images and evaluated to assess how accurately it could capture whether two digits were written by the same writer. We controlled for digit identity by constructing pairs consisting of the same digits. Therefore, a positive pair for this network consisted of two different images of the same digit written by the same person, and a negative pair contained two images of the same digit but by different writers. Examples of pairs from the training and validation datasets are shown in @fig-pairs. We employed a balanced pair sampling approach with half of the pairs being positive and the remaining half negative to ensure the Siamese network learned effectively [@chopra_2005].
 
-Here we used contrastive loss, a loss function introduced by @hadsell_2006, in the Siamese network. This loss function is more appropriate compared to triplet loss since the distinction between similar and dissimilar pairs is of interest rather than the relative ranking of dissimilarity of triplets. Additionally, this is a relatively simple verification task not a complex classification task like facial recognition, and the dataset is relatively small, thus the model should converge more easily using contrastive loss [@herman_2026]. The contrastive loss for a pair is:
-
-$$
-L = yD^2 + (1-y)\max(0,m-D)^2
-$$
-where $y$ is a binary label with $y = 1$ for a positive pair (i.e. same writer, same digit) and $D$ is the Euclidean distance between the embeddings. The hyperparameter $m$ sets the distance at which embeddings for similar pairs results in zero loss (i.e. where the distance reaches the margin) versus embeddings for dissimilar pairs resulting in a large loss, thereby optimising the network to minimise differences between image pairs from the same writer and maximising differences between image pairs from different writers [@Elaraby_2023]. The margin for the initial Siamese network was set as one, but was optimised in a hyperparameter search in [Hyperparameter optimisation](#hyperparameter-optimisation). 
-
-The data were split into 60% training, 20% validation, and 20% test sets. The data were grouped by writer with different writers in each set to ensure that the network learnt to recognise similarities in writing style but without leakage of specific writers to the validation and test set to test generalisability of the model. However, since there were only 20 writers, this split meant only 4 writers in each of the validation and test sets, which is a significant limitation and expanded on in [Train, validation and test strategy](#train-validation-and-test-strategy). 
-
-The shared CNN encoder architecture consisted of two convolutional layers with 16 and 32 filters respectively, both with a filter size of 3 and a ReLu activation function to introduce non-linearity, a max pooling layer between these convolutional layers with both a pool size and stride of 2, and at the end, a global average pooling layer and a dense layer. The convolutional layers learn local image features while max pooling reduces the dimensions of the feature maps. Global pooling converts the feature maps into a vector which is mapped to a 16-number embedding by the dense layer. A relatively simple encoder is used since the input images are low-resolution and contain easily learnable features such as curves and strokes [ref].
-
-In the Siamese model, pairs of images are supplied to the encoder to produce their embeddings and then the Euclidean distance between each pair is calculated. The model is compiled using the Adam optimiser and using the above contrastive loss function which is calculated using the Euclidean distances and a margin of one, and averaged for every batch. Epoch is set to 5 and batch size to 64. 
-
-The outputs from the Siamese model are the Euclidean distances between the two embeddings for each digit pair, which is then turned into the classification of "same" or "different" writer using a threshold determined by the validation pairs [also a limitation with the few writers & the split we have]. We compared the balanced accuracy for actual same and different digit pairs from the validation set at different thresholds, and chose the threshold which maximised the balanced accuracy. The different thresholds tested were all the actual distances between the validation pairs. 
-
-The generalisability of our model was evaluated by predicting on unseen writers' digit image-pairs in the test set. The results are shown in @fig-confusionmat and @tbl-testresults. Examples of pairs from the test batch with predicted and true values are shown in @fig-test-results 
-
-```{r readdata}
-# below = x in e.g.
-x <- handwriting$images / 255 # scale the pixels to 0-1
-#dim(handwriting$images) # 25000 x 28 x 28 x 1 - 1 = number of image channels (greyscale = 1)
-# therefore: 25,000 images, 28 x 28 pixels, 1 image channel
-#range(x) # 0 1
-
-# below = 'labels' in e.g.
-y_person <- handwriting$metadata$person_id - 1L # subtracts 1 from every value in ID
-#range(y_person) # 0 19 = 20 people
-
-set.seed(25)
-```
-
-```{r makepairs}
-
-# need pairs of image indices to compare
-# use person_id to decide if positive / negative pair
-
-make_pairs <- function(ids, # indices of images it can use
-                       n, # how many pairs to create
-                       metadata){ # metadata -> writer ID + digit ID for each image
-  
-  # a: choose the first image in every pair - randomly selects n IDs which can be replicated
-  a <- sample(ids, n, replace = TRUE) 
-  
-  # b: create the second image in every pair
-  b <- vapply(a, function(i){
-    
-    # randomly decide if pair is from same writer or not (should be half of each)
-    same <- runif(1) < 0.5 
-    
-    # finds pool of images with the same digit
-    pool <- ids[metadata$digit[ids] == metadata$digit[i]]
-    
-    if(same){ # if the same writer, pool must be same writer + same digit (pos pair)
-      
-      # 'from all images of digit i, keep only the ones written by the same writer'
-      # CHANGE TO Y_PERSON OR NOT?
-      pool <- pool[metadata$person_id[pool] == metadata$person_id[i]]# who wrote image i
-      
-    } else { # if not the same writer, pool must be diff writer + same digit (neg pair)
-      
-      pool <- pool[metadata$person_id[pool] != metadata$person_id[i]]
-      
-    }
-    sample(setdiff(pool, i), 1) # doesn't allow pairing with itself
-    
-  }, integer(1)) # each iteration must return 1 integer
-  
-  cbind(a,b)
-}
-
-```
-
-```{r makebatch}
-
-make_batch <- function(p, # pairs created by make_pairs()
-                       images = x, # actual images
-                       class_labels = y_person) { # class assoc with images
-  
-  y <- matrix(as.integer( # true = 1, false = 0
-    class_labels[p[, 1]] # labels of first col of p-i matrix
-                         == class_labels[p[, 2]]), # label of second col
-              ncol = 1) # matrix of 1 col for formatting for neural network
-  
-  # return the actual images + the target
-  list(
-    left = images[p[, 1], , , , drop = FALSE], # left side of Siamese (first image of pair)
-    right = images[p[, 2], , , , drop = FALSE], # right side of Siamese (second image of pair)
-    y = y
-  )
-}
-
-```
-
-```{r datasplit}
-# get the writer IDs belonging in each split
-set.seed(25)
-writers <- unique(handwriting$metadata$person_id - 1L)
-train_writers <- sample(writers, 0.6*length(writers))
-
-rest_writers <- setdiff(writers, train_writers)
-set.seed(25)
-valid_writers <- sample(rest_writers, 0.5*length(rest_writers))
-test_writers <- setdiff(rest_writers, valid_writers)
-
-# now extract the image IDs belonging to each split
-train_ids <- which(handwriting$metadata$person_id %in% train_writers)
-valid_ids <- which(handwriting$metadata$person_id %in% valid_writers)
-test_ids <- which(handwriting$metadata$person_id %in% test_writers)
-
-# now make the image index pairs in each split
-set.seed(25)
-train_pairs <- make_pairs(train_ids, length(train_ids), handwriting$metadata)
-valid_pairs <- make_pairs(valid_ids, length(valid_ids), handwriting$metadata)
-test_pairs <- make_pairs(test_ids, length(test_ids), handwriting$metadata)
-
-# for each pair, extract the image + 0/1
-set.seed(25)
-train <- make_batch(train_pairs)
-valid <- make_batch(valid_pairs)
-test  <- make_batch(test_pairs)
-```
-
 ```{r}
 #| label: fig-pairs
 #| fig-cap: "Example training and validation pairs. Top row: training pairs (same writer left, different writer right). Bottom row: validation pairs (same writer left, different writer right)."
@@ -152,7 +30,28 @@ show_pair(pos_valid[1], valid_pairs, "Val: same writer")
 show_pair(neg_valid[1], valid_pairs, "Val: different writer")
 ```
 
-```{r encoderbuild}
+Here we used contrastive loss, a loss function introduced by @hadsell_2006, in the Siamese network. This loss function is more appropriate compared to triplet loss since the distinction between similar and dissimilar pairs is of interest rather than the relative ranking of dissimilarity of triplets. Additionally, this is a relatively simple verification task not a complex classification task like facial recognition, and the dataset is relatively small, thus the model should converge more easily using contrastive loss [@herman_2026]. The contrastive loss for a pair is:
+
+$$
+L = yD^2 + (1-y)\max(0,m-D)^2
+$$
+where $y$ is a binary label with $y = 1$ for a positive pair (i.e. same writer, same digit) and $D$ is the Euclidean distance between the embeddings. The hyperparameter $m$ sets the distance at which embeddings for similar pairs results in zero loss (i.e. where the distance reaches the margin) versus embeddings for dissimilar pairs resulting in a large loss, thereby optimising the network to minimise differences between image pairs from the same writer and maximising differences between image pairs from different writers [@Elaraby_2023]. The margin for the initial Siamese network was set as one, but was optimised in a hyperparameter search in [Hyperparameter optimisation](#hyperparameter-optimisation). 
+
+The data were split into 60% training, 20% validation, and 20% test sets. The data were grouped by writer with different writers in each set to ensure that the network learnt to recognise similarities in writing style but without leakage of specific writers to the validation and test set to test generalisability of the model. However, since there were only 20 writers, this split meant only 4 writers in each of the validation and test sets, which is a significant limitation and expanded on in [Train, validation and test strategy](#train-validation-and-test-strategy). 
+
+The shared CNN encoder architecture consisted of two convolutional layers with 16 and 32 filters respectively, both with a filter size of 3 and a ReLu activation function to introduce non-linearity, a max pooling layer between these convolutional layers with both a pool size and stride of 2, and at the end, a global average pooling layer and a dense layer. The convolutional layers learn local image features while max pooling reduces the dimensions of the feature maps. Global pooling converts the feature maps into a vector which is mapped to a 16-number embedding by the dense layer. A relatively simple encoder is used since the input images are low-resolution and contain easily learnable features such as curves and strokes [ref].
+
+In the Siamese model, pairs of images are supplied to the encoder to produce their embeddings and then the Euclidean distance between each pair is calculated. The model is compiled using the Adam optimiser and using the above contrastive loss function which is calculated using the Euclidean distances and a margin of one, and averaged for every batch. Epoch is set to 5 and batch size to 64. 
+
+The outputs from the Siamese model are the Euclidean distances between the two embeddings for each digit pair, which is then turned into the classification of "same" or "different" writer using a threshold determined by the validation pairs [also a limitation with the few writers & the split we have]. We compared the balanced accuracy for actual same and different digit pairs from the validation set at different thresholds, and chose the threshold which maximised the balanced accuracy. The different thresholds tested were all the actual distances between the validation pairs. 
+
+The generalisability of our model was evaluated by predicting on unseen writers' digit image-pairs in the test set. The results are shown in @fig-confusionmat and @tbl-testresults. Examples of pairs from the test batch with predicted and true values are shown in @fig-test-results 
+
+```{r}
+#| label: encoderbuild
+
+set_random_seed(25) # set random seed for tensorflow
+
 # Build shared encoder - the same as the notes to keep it simple 
 image <- layer_input(shape = c(28, 28, 1)) # each image = 28x28, 1 image channel
 
@@ -167,7 +66,9 @@ encoder <- keras_model(image, z)
 
 ```
 
-```{r siamesebuild}
+```{r}
+#| label: siamesebuild
+
 # a & b = describes pair of images supplied to model
 a <- layer_input(shape = c(28, 28, 1))
 b <- layer_input(shape = c(28, 28, 1))
@@ -183,26 +84,16 @@ distance <- list(encoder(a), encoder(b)) |>
   })
 
 # distance = model output
-model <- keras_model(list(a, b), distance)
+model <- keras_model(list(a, b), distance) 
 ```
 
-```{r constrastiveloss}
-
-contrastive_loss <- function(y, d) {
-  op_mean( # finds avg loss across all pairs in a batch
-    y * op_square(d) + # squares each pair's distance - for same-writer pairs, penalises a large distance
-            (1 - y) * op_square(op_maximum(1 - d, 0))) # for diff writer pairs, penalises only if distance is < 1: if dist >=1, penalty is 0
-}
-
-```
-
-```{r compile}
-set.seed(25)
+```{r}
+#| label: compile
 
 # Use Adam optimiser to compile model and contrastive loss function defined earlier
 model |> compile(
   optimizer = optimizer_adam(1e-3),
-  loss = contrastive_loss
+  loss = contrastive_loss # using fn from siameseFunctions.R
 )
 
 # Fit model with training data and validation data
@@ -217,14 +108,15 @@ model |> fit(
 )
 ```
 
-```{r valid_dist}
+```{r}
+#| label: valid_dist
 
 # Calculate the model predicted distances between the pairs in the validation data
 valid_distance <- as.numeric(predict(model, list(valid$left, valid$right), verbose = 0))
 # Extract the observed labels for whether the pairs are the same or different for validation data
 valid_same <- as.logical(valid$y[, 1])
 
-# Function to calculate accuracy at different thresholds
+# Function to calculate balanced accuracy at different thresholds
 balanced_accuracy_at <- function(cut) {
   predicts_same <- valid_distance < cut # at given threshold (cut) would model predict same or different?
   same_rate <- mean(predicts_same[valid_same]) # accuracy for "same" pairs
@@ -233,7 +125,7 @@ balanced_accuracy_at <- function(cut) {
 }
 
 threshold_candidates <- sort(unique(valid_distance)) # threshold candidates are based on the distances themselves
-threshold_scores <- vapply(threshold_candidates, balanced_accuracy_at, numeric(1)) # calculate balanced accuracy for all threshold candidates
+threshold_scores <- vapply(threshold_candidates, balanced_accuracy_at, numeric(1)) # calculate balanced accuracy for all threshold candidates using fn from siameseFunctions.R
 threshold <- threshold_candidates[which.max(threshold_scores)] 
 best_index <- which.max(threshold_scores) # index for the threshold that maximises the balanced accuracy
 threshold <- threshold_candidates[best_index] # threshold that maximises the balanced accuracy

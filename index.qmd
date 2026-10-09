@@ -15,8 +15,11 @@ execute:
 #| label: setup
 #| include: false
 
-source("R/splitData.R")
+source("R/loadPackages.R")
 source("R/prepData.R")
+source("R/siameseFunctions.R")
+source("R/splitData.R")
+
 ```
 
 {{< include sections/_00-introduction.qmd >}}
@@ -27,11 +30,11 @@ source("R/prepData.R")
 
 {{< include sections/_02-cnn.qmd >}}
 
+{{< include sections/_05-cnn-hpo.qmd >}}
+
 {{< include sections/_03-siamese.qmd >}}
 
 {{< include sections/_05-hpo.qmd >}}
-
-{{< include sections/_05-cnn-hpo.qmd >}}
 
 {{< include sections/_06-comparison.qmd >}}
 
