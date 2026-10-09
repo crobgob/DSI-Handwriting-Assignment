@@ -3,7 +3,7 @@
 <!-- Task 5 (Siamese part): coarse then refined grid search over learning rate, dropout and number of filters for the lecture model structure. 4-fold cross-validation over sessions 1-4. Session 5 is the test set and is only used once, for the selected combination. -->
 
 ```{r}
-set.seed(25)
+set.seed(26)
 
 # ------------- MAYBE PUT THIS ALL INTO R SCRIPT ?
 x <- handwriting$images / 255 # scale the pixels to 0-1
@@ -136,10 +136,11 @@ confusion_matrix <- table(
 
 i <- 1
 snn <- vector(mode = "list", length = 5)
-for (m in c(0.8, 0.9, 1, 1.1, 1.2)) {
+for (m in c(0.5, 0.75, 1, 1.25, 1.5, 2, 2.5)) {
   snn[[i]] <- build_snn(m)
   i <- i + 1
 }
+
 
 snn
 ```
