@@ -116,6 +116,14 @@ valid_distance <- as.numeric(predict(model, list(valid$left, valid$right), verbo
 # Extract the observed labels for whether the pairs are the same or different for validation data
 valid_same <- as.logical(valid$y[, 1])
 
+# Function to calculate balanced accuracy at different thresholds
+balanced_accuracy_at <- function(cut) {
+  predicts_same <- valid_distance < cut # at given threshold (cut) would model predict same or different?
+  same_rate <- mean(predicts_same[valid_same]) # accuracy for "same" pairs
+  different_rate <- mean(!predicts_same[!valid_same]) # accuracy for "different" pairs
+  (same_rate + different_rate) / 2 # mean accuracy for "same" and "different" ("alanced accuracy)
+}
+
 threshold_candidates <- sort(unique(valid_distance)) # threshold candidates are based on the distances themselves
 threshold_scores <- vapply(threshold_candidates, balanced_accuracy_at, numeric(1)) # calculate balanced accuracy for all threshold candidates using fn from siameseFunctions.R
 threshold <- threshold_candidates[which.max(threshold_scores)] 

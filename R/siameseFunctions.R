@@ -59,11 +59,3 @@ contrastive_loss <- function(y, d) {
     y * op_square(d) + # squares each pair's distance - for same-writer pairs, penalises a large distance
       (1 - y) * op_square(op_maximum(1 - d, 0))) # for diff writer pairs, penalises only if distance is < 1: if dist >=1, penalty is 0
 }
-
-# Function to calculate balanced accuracy at different thresholds
-balanced_accuracy_at <- function(cut) {
-  predicts_same <- valid_distance < cut # at given threshold (cut) would model predict same or different?
-  same_rate <- mean(predicts_same[valid_same]) # accuracy for "same" pairs
-  different_rate <- mean(!predicts_same[!valid_same]) # accuracy for "different" pairs
-  (same_rate + different_rate) / 2 # mean accuracy for "same" and "different" ("alanced accuracy)
-}
