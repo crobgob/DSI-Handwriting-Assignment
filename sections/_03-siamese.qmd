@@ -104,14 +104,13 @@ writers <- unique(handwriting$metadata$person_id - 1L)
 train_writers <- sample(writers, 0.6*length(writers))
 
 rest_writers <- setdiff(writers, train_writers)
-set.seed(25)
 valid_writers <- sample(rest_writers, 0.5*length(rest_writers))
 test_writers <- setdiff(rest_writers, valid_writers)
 
 # now extract the image IDs belonging to each split
-train_ids <- which(handwriting$metadata$person_id %in% train_writers)
-valid_ids <- which(handwriting$metadata$person_id %in% valid_writers)
-test_ids <- which(handwriting$metadata$person_id %in% test_writers)
+train_ids <- which(handwriting$metadata$person_id %in% (train_writers + 1))
+valid_ids <- which(handwriting$metadata$person_id %in% (valid_writers + 1))
+test_ids <- which(handwriting$metadata$person_id %in% (test_writers + 1))
 
 # now make the image index pairs in each split
 set.seed(25)
