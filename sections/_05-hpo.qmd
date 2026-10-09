@@ -92,7 +92,7 @@ build_snn_grid <- function(grid) {
   
   for (i in 1:nrow(grid)) { # iterate over hyperparameter combinations
     
-    set.seed(25) # reproducibility
+    set_random_seed(25) # reproducibility
     
     # fit models
     snn <- build_snn(grid$m_values[i], grid$lr_values[i], grid$epochs[i]) 
