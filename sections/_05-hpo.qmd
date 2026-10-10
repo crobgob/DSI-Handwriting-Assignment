@@ -140,8 +140,8 @@ figure_form <- function(results_to_format) {
     geom_point(size = 2) +
     scale_x_log10(breaks = unique(results_to_format$learning_rate)) +
     scale_y_continuous(labels = scales::percent) +
-    facet_wrap(~ batch_size) +
-    labs(x = "Learning rate", y = "Accuracy (validation)", colour = "m") +
+    facet_wrap(~ batch_size, labeller = labeller(filters = function(f) paste("Batch size:", f))) +
+    labs(x = "Learning rate", y = "Accuracy (validation)", colour = "Margin:") +
     theme_minimal() +
     theme(legend.position = "top", axis.text.x = element_text(angle = 45, hjust = 1))
   
@@ -268,7 +268,116 @@ readRDS(snn_hpo_all_file) %>%
 ```
 
 ```{r}
-#build_snn(m = 2, learning_rate = 0.01, epochs = 5, batch_size = 32)
+#| label: snn-hpo-test
+
+# Optimal hyperparameters
+m = 2
+learning_rate = 0.01
+epochs = 5
+batch_size = 32
+
+# Fit model using these hyperparameters
+image <- layer_input(shape = c(28, 28, 1)) # each image = 28x28, 1 image channel
+
+z <- image |>
+  layer_conv_2d(16, kernel_size = c(3,3), activation = "relu") |> # learns useful features (shapes, strokes)
+  layer_max_pooling_2d(2) |> # makes feature maps smaller while keeping important info
+  layer_conv_2d(32, kernel_size = c(3,3), activation = "relu") |>
+  layer_global_average_pooling_2d() |> # converts feature maps -> single vector of numbers
+  layer_dense(16) # converts to 16-no embedding representing the handwriting style
+
+encoder <- keras_model(image, z)
+
+a <- layer_input(shape = c(28, 28, 1))
+b <- layer_input(shape = c(28, 28, 1))
+
+distance <- list(encoder(a), encoder(b)) |>
+  layer_lambda(f = function(z) {
+    op_sqrt(op_sum(op_square(z[[1]] - z[[2]]), 
+                   axis = 2, # sum over embedding dimension
+                   keepdims = TRUE) + 
+              1e-7) # makes sure it's not 0
+  })
+
+model <- keras_model(list(a, b), distance)
+
+contrastive_loss <- function(y, d) {
+  op_mean( # finds avg loss across all pairs in a batch
+    y * op_square(d) + # squares each pair's distance - for same-writer pairs, penalises a large distance
+      (1 - y) * op_square(op_maximum(m - d, 0))) # for diff writer pairs, penalises only if distance is < 1: if dist >=1, penalty is 0
+}
+
+set_random_seed(25)
+
+model |> compile(
+  optimizer = optimizer_adam(learning_rate = learning_rate),
+  loss = contrastive_loss
+)
+
+model |> fit(
+  list(train$left, train$right), train$y,
+  validation_data = list(
+    list(valid$left, valid$right), valid$y
+  ),
+  epochs = epochs,
+  batch_size = batch_size,
+  verbose=0
+)
+
+valid_distance <- as.numeric(predict(model, list(valid$left, valid$right), verbose = 0))
+valid_same <- as.logical(valid$y[, 1])
+
+# Function to calculate balanced accuracy at different thresholds
+balanced_accuracy_at <- function(cut) {
+  predicts_same <- valid_distance < cut # at given threshold (cut) would model predict same or different?
+  same_rate <- mean(predicts_same[valid_same]) # accuracy for "same" pairs
+  different_rate <- mean(!predicts_same[!valid_same]) # accuracy for "different" pairs
+  (same_rate + different_rate) / 2 # mean accuracy for "same" and "different" ("alanced accuracy)
+}
+
+threshold_candidates <- sort(unique(valid_distance))
+threshold_scores <- vapply(threshold_candidates, balanced_accuracy_at, numeric(1))
+best_index <- which.max(threshold_scores)
+threshold <- threshold_candidates[best_index]
+balanced_accuracy <- threshold_scores[best_index]
+
+# Calculate the model predicted distances between the pairs in the test data
+test_distance <- as.numeric(predict(model, list(test$left, test$right), verbose =0))
+# Extract the observed labels for whether the pairs are the same or different for test data
+true_same <- as.logical(test$y[, 1]) 
+# Predicted labels based on selected threshold
+predicted_same <- test_distance < threshold # uses model distance & best threshold 
+
+# Construct confusion matrix based on observed and predicted labels
+confusion_matrix <- table(
+  Actual = factor(true_same,
+                  levels = c(TRUE, FALSE),
+                  labels = c("Same writer", "Different writer")),
+  Predicted = factor(predicted_same,
+                     levels = c(TRUE, FALSE),
+                     labels = c("Same writer", "Different writer"))
+)
+
+# Extract values from confusion matrix
+TN <- confusion_matrix["Different writer", "Different writer"]
+FP <- confusion_matrix["Different writer", "Same writer"]
+FN <- confusion_matrix["Same writer", "Different writer"]
+TP <- confusion_matrix["Same writer", "Same writer"]
+
+# Performance metrics
+accuracy <- (TP + TN) / sum(confusion_matrix)
+precision <- TP / (TP + FP)
+recall <- TP / (TP + FN)
+specificity <- TN / (TN + FP)
+
+results <- data.frame(
+  Metric = c("Accuracy", "Precision", "Recall", "Specificity"),
+  Value = c(accuracy, precision, recall, specificity)
+)
+
+results$Value <- sprintf("%.1f%%", results$Value * 100)
+
+results %>% kable()
 ```
 
 
