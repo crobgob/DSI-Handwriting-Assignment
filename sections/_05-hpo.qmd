@@ -267,6 +267,9 @@ readRDS(snn_hpo_all_file) %>%
           digits = 1, align = "r")
 ```
 
+```{r}
+#build_snn(m = 2, learning_rate = 0.01, epochs = 5, batch_size = 32)
+```
 
 
 
