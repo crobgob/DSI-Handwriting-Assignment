@@ -6,17 +6,22 @@
 #| label: snn-hpo-cache
 
 # After changing any of the training code, delete the files and render again.
-snn_hpo_file <- "results/snn_hpo.rds"
-snn_hpo_run <- !file.exists(snn_hpo_file)
+snn_hpo_coarse_file <- "results/snn_hpo_coarse.rds"
+snn_hpo_refined_file <- "results/snn_hpo_refined.rds"
+snn_hpo_all_file <- "results/snn_hpo_all.rds"
+snn_hpo_run_coarse <- !file.exists(snn_hpo_coarse_file)
+snn_hpo_run_refined <- !file.exists(snn_hpo_refined_file)
+snn_hpo_run_all <- !file.exists(snn_hpo_all_file)
+snn_hpo_run_any <- snn_hpo_run_coarse || snn_hpo_run_refined || snn_hpo_run_all
 
 ```
 
 ```{r}
 #| label: snn-hpo-define
-#| eval: !expr snn_hpo_run
+#| eval: !expr snn_hpo_run_any
 
 # Function to define Siamese network with variable hyperparameters and calculate balanced accuracy from validation data 
-build_snn <- function(m, learning_rate, epochs) {
+build_snn <- function(m, learning_rate, epochs, batch_size) {
 
   image <- layer_input(shape = c(28, 28, 1)) # each image = 28x28, 1 image channel
   
@@ -60,7 +65,7 @@ build_snn <- function(m, learning_rate, epochs) {
       list(valid$left, valid$right), valid$y
     ),
     epochs = epochs,
-    batch_size = 1000,
+    batch_size = batch_size,
     verbose=0
   )
   
@@ -95,56 +100,173 @@ build_snn_grid <- function(grid) {
     set_random_seed(25) # reproducibility
     
     # fit models
-    snn <- build_snn(grid$m_values[i], grid$lr_values[i], grid$epochs[i]) 
+    snn <- build_snn(grid$m_values[i], grid$lr_values[i], grid$epochs[i], grid$batch_size[i]) 
     
     # fill list with results
     snn_grid[[paste(i)]] <- tibble(m = grid$m_values[i], 
                                    learning_rate = grid$lr_values[i], 
                                    #filters = grid$filters[i], 
                                    epochs = grid$epochs[i], 
+                                   batch_size = grid$batch_size[i], 
                                    balanced_accuracy = snn)
     }
   bind_rows(snn_grid) # final results
 }
+
 ```
 
 ```{r}
-#| label: snn-hpo-fit
-#| eval: !expr snn_hpo_run
+#| label: snn-hpo-format
+
+# Function to format table
+table_form <- function(results_to_format) {
+  results_to_format %>% 
+    select(m, learning_rate, batch_size, balanced_accuracy) %>% 
+    arrange(desc(balanced_accuracy)) %>%
+    mutate(learning_rate = format(learning_rate, scientific = FALSE, drop0trailing = TRUE),
+           across(balanced_accuracy, ~ 100 * .x)) %>%
+    select(m, learning_rate, batch_size, balanced_accuracy) %>%
+    head(10) %>%
+    kable(col.names = c("Margin", "Learning rate", "Batch size", "Balanced accuracy (%)"),
+          digits = 1, align = "r")
+}
+  
+# Function to format figures
+figure_form <- function(results_to_format) {
+  
+  results_to_format %>%
+    ggplot(aes(x = learning_rate, y = balanced_accuracy, colour = factor(m))) +
+    geom_line() +
+    geom_point(size = 2) +
+    scale_x_log10(breaks = unique(results_to_format$learning_rate)) +
+    scale_y_continuous(labels = scales::percent) +
+    facet_wrap(~ batch_size) +
+    labs(x = "Learning rate", y = "Accuracy (validation)", colour = "m") +
+    theme_minimal() +
+    theme(legend.position = "top", axis.text.x = element_text(angle = 45, hjust = 1))
+  
+}
+```
+
+```{r}
+#| label: snn-hpo-coarse-fit
+#| eval: !expr snn_hpo_run_coarse
 
 # Define hyperparameter combinations
-snn_hpo_coarse_grid <- expand_grid(#m_values = c(1, 2),
-                                   m_values = c(0.5, 1, 1.5, 2, 2.5),
+snn_hpo_coarse_grid <- expand_grid(m_values = c(0.5, 1, 1.5, 2),
                                    lr_values = c(0.0001, 0.001, 0.01),
-                                   #filters = c(8, 16, 32),
-                                   #epochs = 5)
-                                   epochs = c(5, 10, 20))
+                                   epochs = 5,
+                                   batch_size = c(32, 64, 128))
 
 # Grid search 
-snn_course_grid_results <- build_snn_grid(snn_hpo_coarse_grid)
+snn_course_grid_results <- build_snn_grid(snn_hpo_coarse_grid) # whoops I realised I made a spelling mistake here! but takes a while to run
 
 # Save object
-saveRDS(snn_course_grid_results, snn_hpo_file)
+saveRDS(snn_course_grid_results, snn_hpo_coarse_file)
 
 ```
 
 ```{r}
-#| label: fig-snn-hpo
-#| fig-cap: "Balanced accuracy for grid search of hyperparameters for Siamese network."
+#| label: fig-snn-hpo-coarse
+#| fig-cap: "Balanced accuracy for coarse grid search of hyperparameters for Siamese network."
 #| fig-width: 6
-#| fig-height: 3.5
+#| fig-height: 4
 
 # Plot results
-readRDS(snn_hpo_file) %>%
-  ggplot(aes(x = learning_rate, y = balanced_accuracy, colour = factor(m))) +
-  geom_line() +
-  geom_point(size = 2) +
-  scale_x_log10(breaks = unique(readRDS(snn_hpo_file)$learning_rate)) +
-  scale_y_continuous(labels = scales::percent) +
-  facet_wrap(~ epochs) +
-  labs(x = "Learning rate", y = "Accuracy (validation)", colour = "m") +
-  theme_minimal() +
-  theme(legend.position = "top", axis.text.x = element_text(angle = 45, hjust = 1))
+figure_form(readRDS(snn_hpo_coarse_file))
+```
+
+```{r}
+#| label: tbl-snn-hpo-coarse
+#| tbl-cap: "Coarse grid search results, from highest to lowest balanced accuracy. Including the top 10 results."
+
+table_form(readRDS(snn_hpo_coarse_file))
+```
+
+```{r}
+#| label: snn-hpo-refined-fit
+#| eval: !expr snn_hpo_run_refined
+
+# Select batch size = 32
+snn_hpo_refined_grid <- expand_grid(m_values = c(1.8, 2, 2.2),
+                                   lr_values = c(0.003, 0.01, 0.03),
+                                   epochs = 5,
+                                   batch_size = 32)
+
+# Grid search 
+snn_refined_grid_results <- build_snn_grid(snn_hpo_refined_grid)
+
+# Save object
+saveRDS(snn_refined_grid_results, snn_hpo_refined_file)
 
 ```
+
+```{r}
+#| label: fig-snn-hpo-refined
+#| fig-cap: "Balanced accuracy for refined grid search of hyperparameters for Siamese network."
+#| fig-width: 6
+#| fig-height: 4
+
+# Plot results
+figure_form(readRDS(snn_hpo_refined_file))
+```
+
+```{r}
+#| label: tbl-snn-hpo-refined
+#| tbl-cap: "Refined grid search results, from highest to lowest balanced accuracy."
+
+table_form(readRDS(snn_hpo_refined_file))
+```
+
+```{r}
+#| label: snn-hpo-all-fit
+#| eval: !expr snn_hpo_run_all
+
+# This is to have a look at using 10 and 20 epochs in addition to 5 epochs
+
+# Define hyperparameter combinations and perform grid search
+snn_course_grid_results_all <- build_snn_grid(
+  expand_grid(m_values = c(0.5, 1, 1.5, 2),
+              lr_values = c(0.0001, 0.001, 0.01),
+              epochs = c(5, 10, 20),
+              batch_size = c(32, 64, 128)))
+
+# Save object
+saveRDS(snn_course_grid_results_all, snn_hpo_all_file)
+
+```
+
+```{r}
+#| label: snn-hpo-all-fig-and-tab
+#| eval: FALSE
+
+# Don't evaluate in final report
+
+## Plot results
+# Can't use defined function  
+readRDS(snn_hpo_all_file) %>%
+    ggplot(aes(x = learning_rate, y = balanced_accuracy, colour = factor(m))) +
+    geom_line() +
+    geom_point(size = 2) +
+    scale_x_log10(breaks = unique(readRDS(snn_hpo_all_file)$learning_rate)) +
+    scale_y_continuous(labels = scales::percent) +
+    facet_wrap(epochs ~ batch_size) + # facet by both epochs and batchsize
+    labs(x = "Learning rate", y = "Accuracy (validation)", colour = "m") +
+    theme_minimal() +
+    theme(legend.position = "top", axis.text.x = element_text(angle = 45, hjust = 1))
+
+## Table of results
+# Can't use defined function  
+readRDS(snn_hpo_all_file) %>% 
+    arrange(desc(balanced_accuracy)) %>%
+    mutate(learning_rate = format(learning_rate, scientific = FALSE, drop0trailing = TRUE),
+           across(balanced_accuracy, ~ 100 * .x)) %>%
+    select(m, learning_rate, batch_size, epochs, balanced_accuracy) %>%
+    head(10) %>%
+    kable(col.names = c("Margin", "Learning rate", "Batch size", "Epochs", "Balanced accuracy (%)"),
+          digits = 1, align = "r")
+```
+
+
+
 
