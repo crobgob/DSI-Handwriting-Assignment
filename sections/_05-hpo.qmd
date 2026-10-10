@@ -2,6 +2,8 @@
 
 <!-- Task 5 (Siamese part): grid search over m, learning rate, filters, and number of epochs trained using validation data to decide on final model. -->
 
+The 
+
 ```{r}
 #| label: snn-hpo-cache
 
@@ -268,7 +270,18 @@ readRDS(snn_hpo_all_file) %>%
 ```
 
 ```{r}
-#| label: snn-hpo-test
+#| label: tbl-snn-best-params
+#| tbl-cap: "Selected hyperparameters for the Siamese network which had the highest balanced accuracy across both grids."
+
+# Best cross-validated combination across both grids, trained for its one-standard-error number of epochs
+bind_rows(coarse = readRDS(snn_hpo_coarse_file), refined = readRDS(snn_hpo_refined_file), .id = "grid") %>%
+  slice_max(balanced_accuracy, n = 1, with_ties = FALSE) %>% table_form()
+
+```
+
+```{r}
+#| label: tbl-snn-hpo-test
+#| tbl-cap: "Assessment metrics for tuned Siamese network used to predict on the test set overall and for each digit including the number of pairs for each digit. The test session played no part in choosing the hyperparameters."
 
 # Optimal hyperparameters
 m = 2
@@ -370,14 +383,58 @@ precision <- TP / (TP + FP)
 recall <- TP / (TP + FN)
 specificity <- TN / (TN + FP)
 
-results <- data.frame(
-  Metric = c("Accuracy", "Precision", "Recall", "Specificity"),
-  Value = c(accuracy, precision, recall, specificity)
-)
+snn_test_results <- tibble(Digit = "All digits", 
+                           Images = length(true_same), 
+                           Accuracy = accuracy, 
+                           Precision = precision, 
+                           Recall = recall, 
+                           Specificity = specificity)
 
-results$Value <- sprintf("%.1f%%", results$Value * 100)
+# But now we need to find metrics by digit
+# Find the digit used in each pair in test_pairs
+test_digits <- tibble(image_id = test_pairs[, 1]) %>% 
+  left_join(handwriting$metadata) %>% 
+  select(digit) %>% pull()
 
-results %>% kable()
+# Add digit to tibble with true and predicted same or different
+test_digits_df <- tibble(true_same = true_same,
+                         predicted_same = predicted_same,
+                         test_digits = test_digits)
+
+# Loop over each digit and calculate metrics for each then append row to results table
+for (i in 0:4) {
+  
+  test_digits_df_temp <- test_digits_df %>% filter(test_digits == i)
+  
+  confusion_matrix <- table(
+    Actual = factor(test_digits_df_temp$true_same,
+                    levels = c(TRUE, FALSE),
+                    labels = c("Same writer", "Different writer")),
+    Predicted = factor(test_digits_df_temp$predicted_same,
+                       levels = c(TRUE, FALSE),
+                       labels = c("Same writer", "Different writer"))
+  )
+  
+  # Extract values from confusion matrix
+  TN <- confusion_matrix["Different writer", "Different writer"]
+  FP <- confusion_matrix["Different writer", "Same writer"]
+  FN <- confusion_matrix["Same writer", "Different writer"]
+  TP <- confusion_matrix["Same writer", "Same writer"]
+  
+  # Performance metrics
+  accuracy <- (TP + TN) / sum(confusion_matrix)
+  precision <- TP / (TP + FP)
+  recall <- TP / (TP + FN)
+  specificity <- TN / (TN + FP)
+
+  snn_test_results <- snn_test_results %>% add_row(Digit = as.character(i), Images = nrow(test_digits_df_temp), Accuracy = accuracy, Precision = precision, Recall = recall, Specificity = specificity)
+  
+}
+
+snn_test_results %>%
+    mutate(across(c(Accuracy, Precision, Recall, Specificity), ~ 100 * .x)) %>%
+    kable(digits = 3, align = "r")
+
 ```
 
 
