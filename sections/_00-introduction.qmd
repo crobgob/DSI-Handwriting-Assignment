@@ -7,9 +7,7 @@ Don't repeat other sections
 Define Convolutional neural networks (CNNs) and why useful for this task (person identification from handwriting) and potential applications:
 "Which of a given set of people was this written by?"
 
-Define Siamese neural networks and why useful for this task (handwriting matching) and potential applications (eg. signature identification [@herman_2026])
-"Is this written by the same person?"
-Siamese networks sends two images through an identical CNN and maps each to an embedding (a type of vector). The distance between the two embeddings is calculated and used in the loss function which encourages similar images to have embeddings close together and unrelated images to be further apart.
+Siamese neural networks were first introduced by @Bromley_1993. In Siamese networks, two images are sent through an identical CNN and are each mapped to an embedding (a type of vector). The distance between the two embeddings is calculated and used in the loss function which encourages similar images to have embeddings close together and unrelated images to be further apart. Siamese networks have potential applications in many areas such as signature identification [@herman_2026] and malware image classification task [@Hsiao_2019]. They have been shown to be an effective method for one-shot learning which only require small amounts of training data [@Hsiao_2019]. Thus, Siamese networks are an ideal method to use to answer the question of whether two samples of the same digit were this written by the same person, especially with a relatively small dataset. 
 
-The analysis was conducted in R version 4.6.1 [@R]. Both CNNs and Siamese networks were fitted using the Keras framework via the *keras3* R package [@keras3] using the TensorFlow backend [@tensorflow]. The tidyverse package [@tidyverse] was utilised throughout the analysis for data manipulation and plotting using *ggplot2.* 
+In this report, we fit and tune both a CNN and a Siamese neural network to the data and compare the results. The analysis was conducted in R version 4.6.1 [@R]. Both CNNs and Siamese networks were fitted using the Keras framework via the *keras3* R package [@keras3] using the TensorFlow backend [@tensorflow]. The tidyverse package [@tidyverse] was utilised throughout the analysis for data manipulation and plotting using *ggplot2.* 
 
