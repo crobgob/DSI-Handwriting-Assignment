@@ -2,7 +2,15 @@
 
 <!-- Task 5 (Siamese part): grid search over m, learning rate, filters, and number of epochs trained using validation data to decide on final model. -->
 
-The 
+For the Siamese neural network, the margin size, $m$, the learning rate, and batch size were tuned using a grid search. The CNN encoder architecture and number of epochs was fixed. For each combination, the validation balanced accuracy was calculated at different thresholds and the threshold chosen which maximised the balanced accuracy. As in the CNN hyperparameter tuning a coarse grid search (@fig-snn-hpo-coarse) and a a refined grid search (@fig-snn-hpo-refined) around the best region in the coarse grid were carried out. 
+
+Once again, learning rate had the largest effect on balanced accuracy (@fig-snn-hpo-coarse). Averaged over the other two hyperparameters, balanced accuracy fell from 79.1% at a learning rate of 0.01 to 73.5% at 0.0001. Both margin (76.0% at $m$ = 2 up to 78.3% at $m$ = 0.5) and the batch size (75.4% for batch size of 128 to 78.2% for batch size of 32) had a smaller effect on balanced accuracy. The best learning rate and margin were at the edge of the grid (@fig-snn-hpo-coarse), so the refined grid extended both variables and fixed the batch size at 32. Across both grids, epoch was fixed at 5. 
+
+From the refined search, the combination with the highest balanced accuracy was a learning rate of 0.01, a margin of 2 and 32 filters (@tbl-snn-hpo-refined) with a balanced accuracy of 80.9%. 
+
+Across both grids CV accuracy ranged from 51.1% to 58.6%. Writer identification accuracy was therefore moderately sensitive to the learning rate, which accounts for most of that range, and insensitive to the dropout rate and the number of filters (looking at the values tried we tried).
+
+No combination created huge gains in model performance with the hyperparameter-tuned model only identifying the correct writer ~55% of the time. While this is better than random guessing the CNN still isn’t very reliable for this task. Whether that is due to the model structure or the lack of data (total sessions = 5) is uncertain.
 
 ```{r}
 #| label: snn-hpo-cache
@@ -142,8 +150,8 @@ figure_form <- function(results_to_format) {
     geom_point(size = 2) +
     scale_x_log10(breaks = unique(results_to_format$learning_rate)) +
     scale_y_continuous(labels = scales::percent) +
-    facet_wrap(~ batch_size, labeller = labeller(filters = function(f) paste("Batch size:", f))) +
-    labs(x = "Learning rate", y = "Accuracy (validation)", colour = "Margin:") +
+    facet_wrap(~ batch_size, labeller = labeller(batch_size = function(f) paste("Batch size:", f))) +
+    labs(x = "Learning rate", y = "Balanced accuracy (validation)", colour = "Margin:") +
     theme_minimal() +
     theme(legend.position = "top", axis.text.x = element_text(angle = 45, hjust = 1))
   
@@ -179,8 +187,25 @@ figure_form(readRDS(snn_hpo_coarse_file))
 ```
 
 ```{r}
+#| label: snn-hpo-coarse-results
+#| eval: FALSE
+
+readRDS(snn_hpo_coarse_file) %>%
+  group_by(learning_rate) %>%
+  summarise(mean(balanced_accuracy)*100) 
+
+readRDS(snn_hpo_coarse_file) %>%
+  group_by(m) %>%
+  summarise(mean(balanced_accuracy)*100) 
+
+readRDS(snn_hpo_coarse_file) %>%
+  group_by(batch_size) %>%
+  summarise(mean(balanced_accuracy)*100) 
+```
+
+```{r}
 #| label: tbl-snn-hpo-coarse
-#| tbl-cap: "Coarse grid search results, from highest to lowest balanced accuracy. Including the top 10 results."
+#| tbl-cap: "The five hyperparameter combinations with the highest balanced accuracy in the coarse grid search (36 combinations)."
 
 table_form(readRDS(snn_hpo_coarse_file))
 ```
@@ -211,6 +236,20 @@ saveRDS(snn_refined_grid_results, snn_hpo_refined_file)
 
 # Plot results
 figure_form(readRDS(snn_hpo_refined_file))
+```
+
+```{r}
+#| label: snn-hpo-refined-results
+#| eval: FALSE
+
+readRDS(snn_hpo_refined_file) %>%
+  group_by(learning_rate) %>%
+  summarise(mean(balanced_accuracy)*100) 
+
+readRDS(snn_hpo_refined_file) %>%
+  group_by(m) %>%
+  summarise(mean(balanced_accuracy)*100) 
+
 ```
 
 ```{r}
@@ -267,6 +306,10 @@ readRDS(snn_hpo_all_file) %>%
     head(10) %>%
     kable(col.names = c("Margin", "Learning rate", "Batch size", "Epochs", "Balanced accuracy (%)"),
           digits = 1, align = "r")
+
+
+snn_hpo_all_file <- "../results/snn_hpo_all.rds"
+
 ```
 
 ```{r}
