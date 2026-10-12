@@ -129,11 +129,10 @@ threshold <- threshold_candidates[best_index] # threshold that maximises the bal
 
 We compared the balanced accuracy for same and different digit pairs from the validation set at different Euclidean distance thresholds, and chose the threshold which maximised the balanced accuracy. The different thresholds tested were all the actual distances between the validation pairs. The selected threshold was `r round(threshold, 2)` giving a validation balanced accuracy of `r round(threshold_scores[best_index]*100, 2)`%. 
 
-The generalisability of our model was evaluated by predicting on unseen writers' digit image-pairs in the test set. The balanced accuracy overall and by digit was calculated (@tbl-snn-test). Examples of pairs from the test batch with predicted and true values are shown in @fig-test-results 
+The generalisability of our model was evaluated by predicting on unseen writers' digit image-pairs in the test set and calculating the balanced accuracy. Balanced accuracy was also calculated by digit to assess how performance varied for different digits (@tbl-snn-test-digits). We did not specify whether images should be from the same or different sessions when creating pairs of images, thus whether the pair was from the same session was random with a ratio related to the proportion of images in the same and different sessions in the test set (1000 vs 4000). This resulted in the creation of 1003 pairs with images from the same session and 3997 with images from different sessions. The balanced accuracy was calculated separately for pairs in the same and different sessions to how session changes affects performance (@tbl-snn-test-sessions). Examples of pairs from the test batch with predicted and true values are shown in @fig-test-results.
 
 ```{r}
-#| label: tbl-snn-test
-#| tbl-cap: "Balanced accuracy for Siamese neural network predictions on pairs of images in the test set including a breakdown of balanced accuracy by digit."
+#| label: snn-test
 
 # Calculate the model predicted distances between the pairs in the test data
 test_distance <- as.numeric(predict(model, list(test$left, test$right), verbose =0))
@@ -143,11 +142,18 @@ true_same <- as.logical(test$y[, 1])
 # Calculate balanced accuracy on test set
 snn_test_results <- balanced_accuracy_at(distance = test_distance, same = true_same, cut = threshold)
 
-snn_test_results_table <- tibble(Digit = "All digits", 
-                                 Images = length(true_same), 
-                                 Balanced_accuracy = snn_test_results)
+```
 
-# But now we need to find metrics by digit
+```{r}
+#| label: tbl-snn-test-digits
+#| tbl-cap: "Balanced accuracy for Siamese neural network predictions on pairs of images in the test set including a breakdown of balanced accuracy by digit."
+
+# Break down balanced accuracy by digit
+# Set up tibble for results with the first row the combined balanced accuracy
+snn_test_results_table_digits <- tibble(Digit = "All digits", 
+                                        Images = length(true_same), 
+                                        Balanced_accuracy = snn_test_results)
+
 # Find the digit used in each pair in test_pairs
 test_digits <- tibble(image_id = test_pairs[, 1]) %>% 
   left_join(handwriting$metadata) %>% 
@@ -163,17 +169,64 @@ for (i in 0:4) {
   
   test_digits_df_temp <- test_digits_df %>% filter(test_digits == i)
   
-  snn_test_results <- balanced_accuracy_at(distance = test_digits_df_temp$test_distance, 
+  snn_test_results_digits_loop <- balanced_accuracy_at(distance = test_digits_df_temp$test_distance, 
                                            same = test_digits_df_temp$true_same, 
                                            cut = threshold)
   
-  snn_test_results_table <- snn_test_results_table %>% add_row(Digit = as.character(i), Images = nrow(test_digits_df_temp), Balanced_accuracy = snn_test_results)
+  snn_test_results_table_digits <- snn_test_results_table_digits %>% add_row(Digit = as.character(i), Images = nrow(test_digits_df_temp), Balanced_accuracy = snn_test_results_digits_loop)
   
 }
 
-snn_test_results_table %>%
+snn_test_results_table_digits %>%
     mutate(across(c(Balanced_accuracy), ~ 100 * .x)) %>%
     kable(digits = 3, align = "r", col.names = c("Digit", "Images", "Balanced accuracy"))
+
+```
+
+```{r}
+#| label: tbl-snn-test-sessions
+#| tbl-cap: "Balanced accuracy for Siamese neural network predictions on pairs of images in the test set including a breakdown of balanced accuracy for digits in the same and in different sessions."
+
+# Break down balanced accuracy by session
+# Set up tibble for results with the first row the combined balanced accuracy
+snn_test_results_table_sessions <- tibble(Session = "All sessions", 
+                                          Images = length(true_same), 
+                                          Balanced_accuracy = snn_test_results)
+
+# Find the session used in each pair in test_pairs for both left and right images
+test_session_left <- tibble(image_id = test_pairs[, 1]) %>% 
+  left_join(handwriting$metadata) %>% 
+  select(session) %>% pull()
+
+test_session_right <- tibble(image_id = test_pairs[, 2]) %>% 
+  left_join(handwriting$metadata) %>% 
+  select(session) %>% pull()
+
+# Add digit to tibble with true and predicted same or different
+test_session_df <- tibble(true_same = true_same,
+                         test_distance = test_distance,
+                         # session the same or different 
+                         test_session = factor(x = test_session_left == test_session_right, 
+                                               levels = c(TRUE, FALSE), 
+                                               labels = c("Same session", "Different session"))) # change to named factor
+
+# Loop over each digit and calculate metrics for each then append row to results table
+for (i in c("Same session", "Different session")) {
+  
+  test_session_df_temp <- test_session_df %>% filter(test_session == i)
+  
+  snn_test_results_sessions_loop <- balanced_accuracy_at(distance = test_session_df_temp$test_distance, 
+                                           same = test_session_df_temp$true_same, 
+                                           cut = threshold)
+  
+  snn_test_results_table_sessions <- snn_test_results_table_sessions %>% add_row(Session = as.character(i), Images = nrow(test_session_df_temp), Balanced_accuracy = snn_test_results_sessions_loop)
+  
+}
+
+snn_test_results_table_sessions %>%
+    mutate(across(c(Balanced_accuracy), ~ 100 * .x)) %>%
+    kable(digits = 3, align = "r", col.names = c("Session", "Images", "Balanced accuracy"))
+
 
 ```
 
