@@ -2,6 +2,8 @@
 
 <!-- Task 2: build and evaluate a CNN with writer ID as the response; overall and per-digit performance; what the measures mean in real-world terms. -->
 
+The prediction task is closed-set writer identification: given a single 28 x 28 image of a digit, predict which of the 20 writers produced it. The CNN follows the structure of the lecture example (@tbl-cnn-structure). It was trained on sessions 1-3, session 4 was used to decide when to stop training, and session 5 was held out as the test set, so every test image comes from a session the model has not seen.
+
 ```{r}
 #| label: cnn-cache
 
@@ -102,6 +104,15 @@ saveRDS(list(summary = cnn_summary,
 
 cnn_results <- readRDS(cnn_results_file)
 cnn_test <- cnn_results$predictions %>% filter(set == "test")
+
+# Numbers quoted in the text
+cnn_pct <- function(x) paste0(format(round(100 * x, 1), nsmall = 1), "%")
+cnn_best_epoch <- cnn_results$history %>% slice_max(validation, n = 1, with_ties = FALSE)
+cnn_plateau_epoch <- min(cnn_results$history$epoch[cnn_results$history$validation >= cnn_best_epoch$validation - 0.02])
+cnn_test_accuracy <- mean(cnn_test$person_id == cnn_test$predicted)
+cnn_digit <- cnn_test %>% group_by(digit) %>% summarise(accuracy = mean(person_id == predicted)) %>% arrange(desc(accuracy))
+cnn_writer <- cnn_test %>% group_by(person_id) %>% summarise(accuracy = mean(person_id == predicted))
+cnn_worst_confusion <- cnn_test %>% filter(person_id != predicted) %>% count(person_id, predicted, sort = TRUE) %>% slice(1)
 ```
 
 ### Model structure
@@ -144,6 +155,24 @@ cnn_results$history %>%
 ```
 
 ### Writer identification performance
+
+#### What the evaluation measures capture
+
+In real-world terms, accuracy is the proportion of single handwritten digits that would be attributed to the correct person when the writer is known to be one of 20 enrolled people and the digit was written on a later occasion than the training samples. A system built on this model would name the right person about half the time from one digit. The measure says nothing about people outside the 20, who would always be assigned to one of them. Accuracy by digit shows which digits carry more writer-specific information, and the confusion matrix shows who is mistaken for whom, which matters when a wrong attribution has consequences for the person named.
+
+#### Results of the basic CNN
+
+On the test session the CNN named the correct writer for `r cnn_pct(cnn_test_accuracy)` of images (@tbl-cnn-accuracy), compared with 5% expected baseline (random guessing). Accuracy differed by digit (@tbl-cnn-by-digit): it was highest for digit `r cnn_digit$digit[1]` (`r cnn_pct(cnn_digit$accuracy[1])`) and lowest for digit `r cnn_digit$digit[5]` (`r cnn_pct(cnn_digit$accuracy[5])`). Each digit has 1000 test images from the single session that was not used in training or validation.
+
+#### Error analysis
+
+Errors were concentrated in particular writers (@tbl-cnn-confusion). `r str_to_sentence(xfun::numbers_to_words(sum(cnn_writer$accuracy >= 0.95)))` writers were identified in at least 95% of their images, whereas writers `r knitr::combine_words(cnn_writer$person_id[cnn_writer$accuracy <= 0.05])` were identified in at most 5% of theirs; for example, `r cnn_worst_confusion$n` of the 250 images from writer `r cnn_worst_confusion$person_id` were attributed to writer `r cnn_worst_confusion$predicted`.
+
+#### Overfitting
+
+The CNN overfits the training sessions (@fig-cnn-history). Validation accuracy came within two percentage points of its maximum (`r cnn_pct(cnn_best_epoch$validation)`) by epoch `r cnn_plateau_epoch` and then stayed flat, while training accuracy kept rising to `r cnn_pct(max(cnn_results$history$train))` by the end of training at epoch `r nrow(cnn_results$history)`. The later epochs therefore fitted features of the training sessions that do not carry over to a new session. Validation accuracy did not fall, so the extra training did no harm, but it gave no benefit either. For this reason the hyperparameter search uses the earliest epoch whose validation accuracy is within one standard error of the best, rather than training for longer.
+
+
 
 ```{r}
 #| label: tbl-cnn-accuracy
