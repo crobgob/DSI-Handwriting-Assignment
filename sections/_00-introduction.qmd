@@ -14,5 +14,4 @@ Introduced originally for signature verification [@Bromley1993] and subsequently
 
 This report compares CNN-based writer identification and SNN-based writer verification to investigate how effectively each approach distinguishes individual writing styles in handwritten digit images. It explores the dataset, evaluates both architectures, and compares their performance across hyperparameter configurations, writing sessions, and digit classes, highlighting their respective strengths and limitations.
 
-The analysis was conducted in R version 4.6.1 [@R]. Both CNNs and Siamese networks were fitted using the Keras framework via the *keras3* R package [@keras3] using the TensorFlow backend [@tensorflow]. The tidyverse package [@tidyverse] was utilised throughout the analysis for data manipulation and plotting using *ggplot2.* 
 
