@@ -41,11 +41,7 @@ The data were split into 60% training, 20% validation, and 20% test sets. The da
 
 The shared CNN encoder architecture consisted of two convolutional layers with 16 and 32 filters respectively, both with a filter size of 3 and a ReLu activation function to introduce non-linearity, a max pooling layer between these convolutional layers with both a pool size and stride of 2, and at the end, a global average pooling layer and a dense layer. The convolutional layers learn local image features while max pooling reduces the dimensions of the feature maps. Global pooling converts the feature maps into a vector which is mapped to a 16-number embedding by the dense layer. A relatively simple encoder is used since the input images are low-resolution and contain easily learnable features such as curves and strokes [ref].
 
-In the Siamese model, pairs of images are supplied to the encoder to produce their embeddings and then the Euclidean distance between each pair is calculated. The model is compiled using the Adam optimiser and using the above contrastive loss function which is calculated using the Euclidean distances and a margin of one, and averaged for every batch. Epoch is set to 5 and batch size to 64. 
-
-The outputs from the Siamese model are the Euclidean distances between the two embeddings for each digit pair, which is then turned into the classification of "same" or "different" writer using a threshold determined by the validation pairs [also a limitation with the few writers & the split we have]. We compared the balanced accuracy for actual same and different digit pairs from the validation set at different thresholds, and chose the threshold which maximised the balanced accuracy. The different thresholds tested were all the actual distances between the validation pairs. 
-
-The generalisability of our model was evaluated by predicting on unseen writers' digit image-pairs in the test set. The results are shown in @fig-confusionmat and @tbl-testresults. Examples of pairs from the test batch with predicted and true values are shown in @fig-test-results 
+In the Siamese model, pairs of images are supplied to the encoder to produce their embeddings and then the Euclidean distance between each pair is calculated. The model was compiled using the Adam optimiser and used the above contrastive loss function which was calculated using the Euclidean distances and a margin of one, and averaged for every batch. Epoch was set to 5 and batch size to 64. 
 
 ```{r}
 #| label: encoderbuild
@@ -117,83 +113,121 @@ valid_distance <- as.numeric(predict(model, list(valid$left, valid$right), verbo
 valid_same <- as.logical(valid$y[, 1])
 
 # Function to calculate balanced accuracy at different thresholds
-balanced_accuracy_at <- function(cut) {
-  predicts_same <- valid_distance < cut # at given threshold (cut) would model predict same or different?
-  same_rate <- mean(predicts_same[valid_same]) # accuracy for "same" pairs
-  different_rate <- mean(!predicts_same[!valid_same]) # accuracy for "different" pairs
+balanced_accuracy_at <- function(distance, same, cut) {
+  predicts_same <- distance < cut # at given threshold (cut) would model predict same or different?
+  same_rate <- mean(predicts_same[same]) # accuracy for "same" pairs
+  different_rate <- mean(!predicts_same[!same]) # accuracy for "different" pairs
   (same_rate + different_rate) / 2 # mean accuracy for "same" and "different" ("alanced accuracy)
 }
 
 threshold_candidates <- sort(unique(valid_distance)) # threshold candidates are based on the distances themselves
-threshold_scores <- vapply(threshold_candidates, balanced_accuracy_at, numeric(1)) # calculate balanced accuracy for all threshold candidates using fn from siameseFunctions.R
+threshold_scores <- vapply(threshold_candidates, balanced_accuracy_at, distance = valid_distance, same = valid_same, numeric(1)) # calculate balanced accuracy for all threshold candidates using fn from siameseFunctions.R
 threshold <- threshold_candidates[which.max(threshold_scores)] 
 best_index <- which.max(threshold_scores) # index for the threshold that maximises the balanced accuracy
 threshold <- threshold_candidates[best_index] # threshold that maximises the balanced accuracy
-
-data.frame(threshold = threshold, balanced_accuracy = threshold_scores[best_index])
 ```
 
+We compared the balanced accuracy for same and different digit pairs from the validation set at different Euclidean distance thresholds, and chose the threshold which maximised the balanced accuracy. The different thresholds tested were all the actual distances between the validation pairs. The selected threshold was `r round(threshold, 2)` giving a validation balanced accuracy of `r round(threshold_scores[best_index]*100, 2)`%. 
+
+The generalisability of our model was evaluated by predicting on unseen writers' digit image-pairs in the test set and calculating the balanced accuracy. Balanced accuracy was also calculated by digit to assess how performance varied for different digits (@tbl-snn-test-digits). We did not specify whether images should be from the same or different sessions when creating pairs of images, thus whether the pair was from the same session was random with a ratio related to the proportion of images in the same and different sessions in the test set (1000 vs 4000). This resulted in the creation of 1003 pairs with images from the same session and 3997 with images from different sessions. The balanced accuracy was calculated separately for pairs in the same and different sessions to how session changes affects performance (@tbl-snn-test-sessions). Examples of pairs from the test batch with predicted and true values are shown in @fig-test-results.
+
 ```{r}
-#| label: fig-confusionmat
-#| fig-cap: "Confusion matrix for predictions from the Siamese neural network on pairs of images in the test dataset."
+#| label: snn-test
 
 # Calculate the model predicted distances between the pairs in the test data
 test_distance <- as.numeric(predict(model, list(test$left, test$right), verbose =0))
 # Extract the observed labels for whether the pairs are the same or different for test data
 true_same <- as.logical(test$y[, 1]) 
-# Predicted labels based on selected threshold
-predicted_same <- test_distance < threshold # uses model distance & best threshold 
 
-# Construct confusion matrix based on observed and predicted labels
-confusion_matrix <- table(
-  Actual = factor(true_same,
-                  levels = c(TRUE, FALSE),
-                  labels = c("Same writer", "Different writer")),
-  Predicted = factor(predicted_same,
-                     levels = c(TRUE, FALSE),
-                     labels = c("Same writer", "Different writer"))
-)
-
-# Plot confusion matrix
-confusion_matrix %>% as.data.frame() %>% # first convert to data frame
-  ggplot(aes(x = Predicted, y = Actual, fill = Freq)) + # fill with counts
-  geom_tile() +
-  geom_text(aes(label = Freq), color = "black", size = 6) +
-  scale_fill_gradient(low = "orange", high = "deepskyblue") + # add colour according to scale
-  scale_y_discrete(limits = rev) + # swap categories on y axis
-  scale_x_discrete(position = "top") + # move labels to top
-  labs(x = "Predicted", y = "Actual") +
-  theme_minimal() + 
-  theme(panel.grid = element_blank(), legend.position = "none", # remove legend
-        text = element_text(size = 16), # increase text size
-        axis.text.y = element_text(angle = 90, hjust = 0.5)) # adjust y axis labels
+# Calculate balanced accuracy on test set
+snn_test_results <- balanced_accuracy_at(distance = test_distance, same = true_same, cut = threshold)
 
 ```
 
 ```{r}
-#| label: tbl-testresults
-#| tbl-cap: "Assessment metrics for Siamese neural network predictions on pairs of images in the test set."
+#| label: tbl-snn-test-digits
+#| tbl-cap: "Balanced accuracy for Siamese neural network predictions on pairs of images in the test set including a breakdown of balanced accuracy by digit."
 
-# Extract values from confusion matrix
-TN <- confusion_matrix["Different writer", "Different writer"]
-FP <- confusion_matrix["Different writer", "Same writer"]
-FN <- confusion_matrix["Same writer", "Different writer"]
-TP <- confusion_matrix["Same writer", "Same writer"]
+# Break down balanced accuracy by digit
+# Set up tibble for results with the first row the combined balanced accuracy
+snn_test_results_table_digits <- tibble(Digit = "All digits", 
+                                        Images = length(true_same), 
+                                        Balanced_accuracy = snn_test_results)
 
-# Performance metrics
-accuracy <- (TP + TN) / sum(confusion_matrix)
-precision <- TP / (TP + FP)
-recall <- TP / (TP + FN)
-specificity <- TN / (TN + FP)
+# Find the digit used in each pair in test_pairs
+test_digits <- tibble(image_id = test_pairs[, 1]) %>% 
+  left_join(handwriting$metadata) %>% 
+  select(digit) %>% pull()
 
-results <- data.frame(
-  Metric = c("Accuracy", "Precision", "Recall", "Specificity"),
-  Value = c(accuracy, precision, recall, specificity)
-)
+# Add digit to tibble with true and predicted same or different
+test_digits_df <- tibble(true_same = true_same,
+                         test_distance = test_distance,
+                         test_digits = test_digits)
 
-results$Value <- sprintf("%.1f%%", results$Value * 100)
+# Loop over each digit and calculate metrics for each then append row to results table
+for (i in 0:4) {
+  
+  test_digits_df_temp <- test_digits_df %>% filter(test_digits == i)
+  
+  snn_test_results_digits_loop <- balanced_accuracy_at(distance = test_digits_df_temp$test_distance, 
+                                           same = test_digits_df_temp$true_same, 
+                                           cut = threshold)
+  
+  snn_test_results_table_digits <- snn_test_results_table_digits %>% add_row(Digit = as.character(i), Images = nrow(test_digits_df_temp), Balanced_accuracy = snn_test_results_digits_loop)
+  
+}
 
-results %>% kable()
+snn_test_results_table_digits %>%
+    mutate(across(c(Balanced_accuracy), ~ 100 * .x)) %>%
+    kable(digits = 3, align = "r", col.names = c("Digit", "Images", "Balanced accuracy"))
+
+```
+
+```{r}
+#| label: tbl-snn-test-sessions
+#| tbl-cap: "Balanced accuracy for Siamese neural network predictions on pairs of images in the test set including a breakdown of balanced accuracy for digits in the same and in different sessions."
+
+# Break down balanced accuracy by session
+# Set up tibble for results with the first row the combined balanced accuracy
+snn_test_results_table_sessions <- tibble(Session = "All sessions", 
+                                          Images = length(true_same), 
+                                          Balanced_accuracy = snn_test_results)
+
+# Find the session used in each pair in test_pairs for both left and right images
+test_session_left <- tibble(image_id = test_pairs[, 1]) %>% 
+  left_join(handwriting$metadata) %>% 
+  select(session) %>% pull()
+
+test_session_right <- tibble(image_id = test_pairs[, 2]) %>% 
+  left_join(handwriting$metadata) %>% 
+  select(session) %>% pull()
+
+# Add digit to tibble with true and predicted same or different
+test_session_df <- tibble(true_same = true_same,
+                         test_distance = test_distance,
+                         # session the same or different 
+                         test_session = factor(x = test_session_left == test_session_right, 
+                                               levels = c(TRUE, FALSE), 
+                                               labels = c("Same session", "Different session"))) # change to named factor
+
+# Loop over each digit and calculate metrics for each then append row to results table
+for (i in c("Same session", "Different session")) {
+  
+  test_session_df_temp <- test_session_df %>% filter(test_session == i)
+  
+  snn_test_results_sessions_loop <- balanced_accuracy_at(distance = test_session_df_temp$test_distance, 
+                                           same = test_session_df_temp$true_same, 
+                                           cut = threshold)
+  
+  snn_test_results_table_sessions <- snn_test_results_table_sessions %>% add_row(Session = as.character(i), Images = nrow(test_session_df_temp), Balanced_accuracy = snn_test_results_sessions_loop)
+  
+}
+
+snn_test_results_table_sessions %>%
+    mutate(across(c(Balanced_accuracy), ~ 100 * .x)) %>%
+    kable(digits = 3, align = "r", col.names = c("Session", "Images", "Balanced accuracy"))
+
+
 ```
 
 ```{r}

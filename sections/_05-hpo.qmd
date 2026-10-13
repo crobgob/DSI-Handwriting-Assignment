@@ -2,7 +2,7 @@
 
 <!-- Task 5 (Siamese part): grid search over m, learning rate, filters, and number of epochs trained using validation data to decide on final model. -->
 
-The 
+For the Siamese neural network, the margin size, $m$, the learning rate, and batch size were tuned using a grid search. The CNN encoder architecture and number of epochs was fixed. For each combination, the validation balanced accuracy was calculated at different thresholds and the threshold which maximised the balanced accuracy was chosen. The use of the same validation dataset to select the threshold and calculate the balanced accuracy is a limitation here. Ideally the validation dataset would be separated into two with one set used to calculate the threshold from and the other set used to calculate the balanced accuracy using that threshold. However, with pairs constructed from only four writers in the validation dataset, this dataset was too small to split. As in the CNN hyperparameter tuning, a coarse grid search (@fig-snn-hpo-coarse) using 36 combinations of hyperparameters and a a refined grid search (@fig-snn-hpo-refined) around the best region in the coarse grid using 9 combinations of hyperparameters were carried out. 
 
 ```{r}
 #| label: snn-hpo-cache
@@ -142,8 +142,8 @@ figure_form <- function(results_to_format) {
     geom_point(size = 2) +
     scale_x_log10(breaks = unique(results_to_format$learning_rate)) +
     scale_y_continuous(labels = scales::percent) +
-    facet_wrap(~ batch_size, labeller = labeller(filters = function(f) paste("Batch size:", f))) +
-    labs(x = "Learning rate", y = "Accuracy (validation)", colour = "Margin:") +
+    facet_wrap(~ batch_size, labeller = labeller(batch_size = function(f) paste("Batch size:", f))) +
+    labs(x = "Learning rate", y = "Balanced accuracy (validation)", colour = "Margin:") +
     theme_minimal() +
     theme(legend.position = "top", axis.text.x = element_text(angle = 45, hjust = 1))
   
@@ -169,6 +169,25 @@ saveRDS(snn_course_grid_results, snn_hpo_coarse_file)
 ```
 
 ```{r}
+#| label: snn-hpo-coarse-results
+
+snn_hpo_coarse_lr <- readRDS(snn_hpo_coarse_file) %>%
+  group_by(learning_rate) %>%
+  summarise(balanced_accuracy = mean(balanced_accuracy)*100) %>% round(2)
+
+snn_hpo_coarse_m <- readRDS(snn_hpo_coarse_file) %>%
+  group_by(m) %>%
+  summarise(balanced_accuracy = mean(balanced_accuracy)*100) %>% round(2)
+
+snn_hpo_coarse_batch_size <- readRDS(snn_hpo_coarse_file) %>%
+  group_by(batch_size) %>%
+  summarise(balanced_accuracy = mean(balanced_accuracy)*100) %>% round(2)
+
+```
+
+Once again, learning rate had the largest effect on balanced accuracy (@fig-snn-hpo-coarse). Averaged over the other two hyperparameters, balanced accuracy fell from `r snn_hpo_coarse_lr$balanced_accuracy[3]`% at a learning rate of 0.01 to `r snn_hpo_coarse_lr$balanced_accuracy[1]`% at 0.0001. Both margin (`r snn_hpo_coarse_m$balanced_accuracy[4]`% at $m$ = 2 up to `r snn_hpo_coarse_m$balanced_accuracy[1]`% at $m$ = 0.5) and the batch size (`r snn_hpo_coarse_batch_size$balanced_accuracy[3]`% for batch size of 128 to `r snn_hpo_coarse_batch_size$balanced_accuracy[1]`% for batch size of 32) had a smaller effect on balanced accuracy. The best learning rate and margin were at the edge of the grid (@fig-snn-hpo-coarse), so the refined grid extended both variables and fixed the batch size at 32 (@fig-snn-hpo-refined). Across both grids, the number of epochs was fixed at 5. 
+
+```{r}
 #| label: fig-snn-hpo-coarse
 #| fig-cap: "Balanced accuracy for coarse grid search of hyperparameters for Siamese network."
 #| fig-width: 6
@@ -180,7 +199,7 @@ figure_form(readRDS(snn_hpo_coarse_file))
 
 ```{r}
 #| label: tbl-snn-hpo-coarse
-#| tbl-cap: "Coarse grid search results, from highest to lowest balanced accuracy. Including the top 10 results."
+#| tbl-cap: "The five hyperparameter combinations with the highest balanced accuracy in the coarse grid search (36 combinations)."
 
 table_form(readRDS(snn_hpo_coarse_file))
 ```
@@ -202,6 +221,23 @@ snn_refined_grid_results <- build_snn_grid(snn_hpo_refined_grid)
 saveRDS(snn_refined_grid_results, snn_hpo_refined_file)
 
 ```
+
+```{r}
+#| label: snn-hpo-refined-results
+
+snn_hpo_refined_lr <- readRDS(snn_hpo_refined_file) %>%
+  group_by(learning_rate) %>%
+  summarise(balanced_accuracy = mean(balanced_accuracy)*100) %>% round(2)
+
+snn_hpo_refined_m <- readRDS(snn_hpo_refined_file) %>%
+  group_by(m) %>%
+  summarise(balanced_accuracy = mean(balanced_accuracy)*100) %>% round(2)
+
+snn_best_refined <- readRDS(snn_hpo_refined_file) %>% arrange(desc(balanced_accuracy)) %>% head(1)
+
+```
+
+The hyperparameters which gave the highest balanced accuracy of `r round(snn_best_refined$balanced_accuracy*100, 2)`% selected from the refined search were a learning rate of `r snn_best_refined$learning_rate`, a margin of `r snn_best_refined$m` and a batch size of `r snn_best_refined$batch_size` (@tbl-snn-hpo-refined). 
 
 ```{r}
 #| label: fig-snn-hpo-refined
@@ -267,27 +303,20 @@ readRDS(snn_hpo_all_file) %>%
     head(10) %>%
     kable(col.names = c("Margin", "Learning rate", "Batch size", "Epochs", "Balanced accuracy (%)"),
           digits = 1, align = "r")
-```
-
-```{r}
-#| label: tbl-snn-best-params
-#| tbl-cap: "Selected hyperparameters for the Siamese network which had the highest balanced accuracy across both grids."
-
-# Best cross-validated combination across both grids, trained for its one-standard-error number of epochs
-bind_rows(coarse = readRDS(snn_hpo_coarse_file), refined = readRDS(snn_hpo_refined_file), .id = "grid") %>%
-  slice_max(balanced_accuracy, n = 1, with_ties = FALSE) %>% table_form()
 
 ```
 
+The model was retrained on the training data using the selected hyperparameters and used to predict on the test set. The balanced accuracy was calculated overall, by digit (@tbl-snn-hpo-test-digits), and by whether images were in the same or different sessions (@tbl-snn-hpo-test-sessions). Overall the tuned model yielded a higher balanced accuracy on the test dataset than the initial model. 
+[why is test accuracy higher than validation accuracy?]
+
 ```{r}
-#| label: tbl-snn-hpo-test
-#| tbl-cap: "Assessment metrics for tuned Siamese network used to predict on the test set overall and for each digit including the number of pairs for each digit. The test session played no part in choosing the hyperparameters."
+#| label: snn-hpo-test-set
 
 # Optimal hyperparameters
-m = 2
-learning_rate = 0.01
-epochs = 5
-batch_size = 32
+m = snn_best_refined$m
+learning_rate = snn_best_refined$learning_rate
+epochs = snn_best_refined$epochs
+batch_size = snn_best_refined$batch_size
 
 # Fit model using these hyperparameters
 image <- layer_input(shape = c(28, 28, 1)) # each image = 28x28, 1 image channel
@@ -340,57 +369,32 @@ model |> fit(
 valid_distance <- as.numeric(predict(model, list(valid$left, valid$right), verbose = 0))
 valid_same <- as.logical(valid$y[, 1])
 
-# Function to calculate balanced accuracy at different thresholds
-balanced_accuracy_at <- function(cut) {
-  predicts_same <- valid_distance < cut # at given threshold (cut) would model predict same or different?
-  same_rate <- mean(predicts_same[valid_same]) # accuracy for "same" pairs
-  different_rate <- mean(!predicts_same[!valid_same]) # accuracy for "different" pairs
-  (same_rate + different_rate) / 2 # mean accuracy for "same" and "different" ("alanced accuracy)
-}
-
 threshold_candidates <- sort(unique(valid_distance))
-threshold_scores <- vapply(threshold_candidates, balanced_accuracy_at, numeric(1))
+threshold_scores <- vapply(threshold_candidates, balanced_accuracy_at, distance = valid_distance, same = valid_same, numeric(1))
 best_index <- which.max(threshold_scores)
 threshold <- threshold_candidates[best_index]
 balanced_accuracy <- threshold_scores[best_index]
 
 # Calculate the model predicted distances between the pairs in the test data
-test_distance <- as.numeric(predict(model, list(test$left, test$right), verbose =0))
+test_distance <- as.numeric(predict(model, list(test$left, test$right), verbose = 0))
 # Extract the observed labels for whether the pairs are the same or different for test data
 true_same <- as.logical(test$y[, 1]) 
-# Predicted labels based on selected threshold
-predicted_same <- test_distance < threshold # uses model distance & best threshold 
 
-# Construct confusion matrix based on observed and predicted labels
-confusion_matrix <- table(
-  Actual = factor(true_same,
-                  levels = c(TRUE, FALSE),
-                  labels = c("Same writer", "Different writer")),
-  Predicted = factor(predicted_same,
-                     levels = c(TRUE, FALSE),
-                     labels = c("Same writer", "Different writer"))
-)
+# Calculate balanced accuracy on test set
+snn_hpo_test_results <- balanced_accuracy_at(distance = test_distance, same = true_same, cut = threshold)
 
-# Extract values from confusion matrix
-TN <- confusion_matrix["Different writer", "Different writer"]
-FP <- confusion_matrix["Different writer", "Same writer"]
-FN <- confusion_matrix["Same writer", "Different writer"]
-TP <- confusion_matrix["Same writer", "Same writer"]
+```
 
-# Performance metrics
-accuracy <- (TP + TN) / sum(confusion_matrix)
-precision <- TP / (TP + FP)
-recall <- TP / (TP + FN)
-specificity <- TN / (TN + FP)
+```{r}
+#| label: tbl-snn-hpo-test-digits
+#| tbl-cap: "Balanced accuracy for tuned Siamese neural network predictions on pairs of images in the test set including a breakdown of balanced accuracy by digit."
 
-snn_test_results <- tibble(Digit = "All digits", 
-                           Images = length(true_same), 
-                           Accuracy = accuracy, 
-                           Precision = precision, 
-                           Recall = recall, 
-                           Specificity = specificity)
+# Break down balanced accuracy by digit
+# Set up tibble for results with the first row the combined balanced accuracy
+snn_hpo_test_results_table_digits <- tibble(Digit = "All digits", 
+                                            Images = length(true_same), 
+                                            Balanced_accuracy = snn_hpo_test_results)
 
-# But now we need to find metrics by digit
 # Find the digit used in each pair in test_pairs
 test_digits <- tibble(image_id = test_pairs[, 1]) %>% 
   left_join(handwriting$metadata) %>% 
@@ -398,7 +402,7 @@ test_digits <- tibble(image_id = test_pairs[, 1]) %>%
 
 # Add digit to tibble with true and predicted same or different
 test_digits_df <- tibble(true_same = true_same,
-                         predicted_same = predicted_same,
+                         test_distance = test_distance,
                          test_digits = test_digits)
 
 # Loop over each digit and calculate metrics for each then append row to results table
@@ -406,34 +410,64 @@ for (i in 0:4) {
   
   test_digits_df_temp <- test_digits_df %>% filter(test_digits == i)
   
-  confusion_matrix <- table(
-    Actual = factor(test_digits_df_temp$true_same,
-                    levels = c(TRUE, FALSE),
-                    labels = c("Same writer", "Different writer")),
-    Predicted = factor(test_digits_df_temp$predicted_same,
-                       levels = c(TRUE, FALSE),
-                       labels = c("Same writer", "Different writer"))
-  )
+  snn_hpo_test_results_digits_loop <- balanced_accuracy_at(distance = test_digits_df_temp$test_distance, 
+                                                           same = test_digits_df_temp$true_same, 
+                                                           cut = threshold)
   
-  # Extract values from confusion matrix
-  TN <- confusion_matrix["Different writer", "Different writer"]
-  FP <- confusion_matrix["Different writer", "Same writer"]
-  FN <- confusion_matrix["Same writer", "Different writer"]
-  TP <- confusion_matrix["Same writer", "Same writer"]
-  
-  # Performance metrics
-  accuracy <- (TP + TN) / sum(confusion_matrix)
-  precision <- TP / (TP + FP)
-  recall <- TP / (TP + FN)
-  specificity <- TN / (TN + FP)
-
-  snn_test_results <- snn_test_results %>% add_row(Digit = as.character(i), Images = nrow(test_digits_df_temp), Accuracy = accuracy, Precision = precision, Recall = recall, Specificity = specificity)
+  snn_hpo_test_results_table_digits <- snn_hpo_test_results_table_digits %>% add_row(Digit = as.character(i), Images = nrow(test_digits_df_temp), Balanced_accuracy = snn_hpo_test_results_digits_loop)
   
 }
 
-snn_test_results %>%
-    mutate(across(c(Accuracy, Precision, Recall, Specificity), ~ 100 * .x)) %>%
-    kable(digits = 3, align = "r")
+snn_hpo_test_results_table_digits %>%
+    mutate(across(c(Balanced_accuracy), ~ 100 * .x)) %>%
+    kable(digits = 3, align = "r", col.names = c("Digit", "Images", "Balanced accuracy"))
+
+```
+
+```{r}
+#| label: tbl-snn-hpo-test-sessions
+#| tbl-cap: "Balanced accuracy for tuned Siamese neural network predictions on pairs of images in the test set including a breakdown of balanced accuracy for digits in the same and in different sessions."
+
+# Break down balanced accuracy by session
+# Set up tibble for results with the first row the combined balanced accuracy
+snn_hpo_test_results_table_sessions <- tibble(Session = "All sessions", 
+                                              Images = length(true_same), 
+                                              Balanced_accuracy = snn_hpo_test_results)
+
+# Find the session used in each pair in test_pairs for both left and right images
+test_session_left <- tibble(image_id = test_pairs[, 1]) %>% 
+  left_join(handwriting$metadata) %>% 
+  select(session) %>% pull()
+
+test_session_right <- tibble(image_id = test_pairs[, 2]) %>% 
+  left_join(handwriting$metadata) %>% 
+  select(session) %>% pull()
+
+# Add digit to tibble with true and predicted same or different
+test_session_df <- tibble(true_same = true_same,
+                         test_distance = test_distance,
+                         # session the same or different 
+                         test_session = factor(x = test_session_left == test_session_right, 
+                                               levels = c(TRUE, FALSE), 
+                                               labels = c("Same session", "Different session"))) # change to named factor
+
+# Loop over each digit and calculate metrics for each then append row to results table
+for (i in c("Same session", "Different session")) {
+  
+  test_session_df_temp <- test_session_df %>% filter(test_session == i)
+  
+  snn_hpo_test_results_sessions_loop <- balanced_accuracy_at(distance = test_session_df_temp$test_distance, 
+                                           same = test_session_df_temp$true_same, 
+                                           cut = threshold)
+  
+  snn_hpo_test_results_table_sessions <- snn_hpo_test_results_table_sessions %>% add_row(Session = as.character(i), Images = nrow(test_session_df_temp), Balanced_accuracy = snn_hpo_test_results_sessions_loop)
+  
+}
+
+snn_hpo_test_results_table_sessions %>%
+    mutate(across(c(Balanced_accuracy), ~ 100 * .x)) %>%
+    kable(digits = 3, align = "r", col.names = c("Session", "Images", "Balanced accuracy"))
+
 
 ```
 
