@@ -134,7 +134,7 @@ tibble(layer = str_trim(cnn_layers[, 2]),
   filter(!is.na(parameters)) %>% # drops the header row of the Keras summary
   add_row(layer = "Total", output_shape = "", parameters = sum(.$parameters)) %>%
   knitr::kable(col.names = c("Layer (type)", "Output shape", "Parameters"),
-               format.args = list(big.mark = ","), align = "llr")
+               align = "llr")
 ```
 
 ### Training
@@ -185,7 +185,7 @@ cnn_results$predictions %>%
   group_by(set) %>%
   summarise(n = n(), accuracy = 100 * mean(person_id == predicted)) %>%
   knitr::kable(col.names = c("Set", "Images", "Accuracy (%)"),
-               digits = 1, format.args = list(big.mark = ","), align = "lrr")
+               digits = 1, align = "lrr")
 ```
 
 ```{r}
@@ -197,7 +197,7 @@ cnn_test %>%
   summarise(n = n(), accuracy = 100 * mean(person_id == predicted)) %>%
   arrange(desc(accuracy)) %>%
   knitr::kable(col.names = c("Digit", "Images", "Accuracy (%)"),
-               digits = 1, format.args = list(big.mark = ","), align = "lrr")
+               digits = 1, align = "lrr")
 ```
 
 ```{r}
