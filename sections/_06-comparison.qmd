@@ -1,3 +1,35 @@
 ## Comparing the CNN and Siamese results
 
 <!-- Task 6: which digits carry more writer information; how session changes affect performance. -->
+<!-- Task 6: which digits carry more writer information; how session changes affect performance. -->
+The Siamese network and CNN were employed on different tasks; SNN for writer-verification and CNN for writer-identification, and so their accuracy metrics are not directly comparable. However, both tuned models far out-perform what would be expected by chance: SNN achieved a test balanced accuracy of 82.8% (versus 50% baseline for verifying same- vs different-writer) and the CNN a test accuracy of 53.2% (versus 5% baseline for classifying 1/20 writers), which indicates suitability of each network for their respective tasks.
+
+When evaluated on per-digit performance, the two networks had differing results. The tuned CNN had accuracies ranging from 51.4% to 56.5% across the digits, while the tuned SNN ranged from 76.5% to 86.4%, with digit '2' had the highest accuracy for the CNN while this digit had the lowest balanced accuracy for the SNN (@snn_test_results_table_digits; @cnn_hpo_test_digit).
+Although the results may appear to be contrary, it actually provides a broader wealth of information for the writer discrimination. 
+Digits achieving a high accuracy (CNN) and low balanced accuracy (SNN) (e.g., digit '2') may indicate that '2' can help to classify the enrolled/known writers (from one another), but that this information does not aid in distinguishing same- versus different-writer pairs for unseen writers. Conversely, digits with high balanced accuracy (SNN) and low accuracy (CNN) (e.g., digit '0') may be useful to distinguish same-writer from different-writer pairs, even when it may not be well understood which writer it was from. The digits '4' and '3' were mid- to upper-ranges for both metrics, which may show that it serves usefulness in both tasks - as writer identifier and as distinguishing same- or different-writer. 
+[There was variability in the digit performance for the untuned vs tuned models]
+
+[digit-table comparing the ranking from each model?]
+
+The effect of session changes on performance was only able to be evaluated using the SNN, as the CNN had to split the data on session-level to perform the writer identification. Same-session balanced accuracy for the SNN was higher than for different-session (94.4% versus 79.7%). That same-session verification was easier than different-session verification was an (obvious/expected) result, since we would naturally expect some variation in handwriting in different sessions, and this aspect of the experiment was controlled for.
+
+Writer information: 
+The CNN correctly identified writers 7 & 18 near-perfectly, while it nearly always misattributed writers 5 & 13, meaning that their handwriting was near-indistinguishable from the others. Since the SNN datasets were stratified by writers, we cannot evaluate its performance as directly, although we note that writers 5 & 13 happened to be in the validation set used for HP tuning, which may be difficult/explain why x.
+
+
+HP: 
+The CNN and SNN both exhibited moderate sensitivity to the learning rate in the hyperparameter tuning, with no substantial improvements with the tuning of other HPs for the CNN, while a smaller batch size (tended to) increase the balanced accuracy for the SNN.
+
+[CNN test results show how well it identifies enrolled writers in a new session, while SNN learns to compare writing styles for writers it hasn't seen during training].
+
+CNN:
+The tuned CNN achieved a writer-identification (CV) accuracy of 57.0%, compared to random guessing baseline of 5%, and a test accuracy of 53.2%. 
+Accuracy across digits ranged from 51.4% to 56.5%, with digit '2' carrying the most writer information (highest accuracy).
+
+SNN:
+The tuned SNN achieved a maximal balanced accuracy of 88.7% for digit '0', and digit '2' had the lowest accuracy, opposite to the CNN results.
+Overall test balanced accuracy was 84.4%.
+Same-session accuracy was 91.9% versus different-session accuracy of 82.4%.
+
+Compare:
+SNN is clearly far better suited to the task of writer verification than the CNN is to the task of writer identification for this dataset.
