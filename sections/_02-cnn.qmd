@@ -2,7 +2,9 @@
 
 <!-- Task 2: build and evaluate a CNN with writer ID as the response; overall and per-digit performance; what the measures mean in real-world terms. -->
 
-The prediction task is closed-set writer identification: given a single 28 x 28 image of a digit, predict which of the 20 writers produced it. The CNN follows the structure of the lecture example (@tbl-cnn-structure). It was trained on sessions 1-3, session 4 was used to decide when to stop training, and session 5 was held out as the test set, so every test image comes from a session the model has not seen.
+The prediction task is closed-set writer identification: given a single 28 x 28 image of a digit, the model predicts which of the 20 writers produced it. The CNN follows the structure of the lecture example (@tbl-cnn-structure). It was trained on sessions 1-3, with session 4 used for validation and to decide when to stop training. Session 5 was held out as the test set, ensuring that all test images come from a session not seen during training.
+
+The analysis was conducted in R version 4.6.1 [@R]. Both CNNs and Siamese networks were fitted using the Keras framework via the *keras3* R package [@keras3] using the TensorFlow backend [@tensorflow]. The tidyverse package [@tidyverse] was utilised throughout the analysis for data manipulation and plotting using *ggplot2.*
 
 ```{r}
 #| label: cnn-cache
@@ -158,11 +160,11 @@ cnn_results$history %>%
 
 #### What the evaluation measures capture
 
-In real-world terms, accuracy is the proportion of single handwritten digits that would be attributed to the correct person when the writer is known to be one of 20 enrolled people and the digit was written on a later occasion than the training samples. A system built on this model would name the right person about half the time from one digit. The measure says nothing about people outside the 20, who would always be assigned to one of them. Accuracy by digit shows which digits carry more writer-specific information, and the confusion matrix shows who is mistaken for whom, which matters when a wrong attribution has consequences for the person named.
+In real-world terms, accuracy represents the proportion of handwritten digit images correctly attributed to the writer, assuming the writer is one of the 20 enrolled individuals and the digit was written in a session not used for training. A system based on this model would correctly identify the writer from a single digit approximately half the time. However, this measure says nothing about individuals outside the 20 enrolled writers, as the model would still assign images to one of them. Accuracy by digit indicates which digits may contain more writer-specific information, while the confusion matrix shows which writers are most frequently mistaken for one another. This is particularly relevant when an incorrect attribution has consequences for the person identified.
 
 #### Results of the basic CNN
 
-On the test session the CNN named the correct writer for `r cnn_pct(cnn_test_accuracy)` of images (@tbl-cnn-accuracy), compared with 5% expected baseline (random guessing). Accuracy differed by digit (@tbl-cnn-by-digit): it was highest for digit `r cnn_digit$digit[1]` (`r cnn_pct(cnn_digit$accuracy[1])`) and lowest for digit `r cnn_digit$digit[5]` (`r cnn_pct(cnn_digit$accuracy[5])`). Each digit has 1000 test images from the single session that was not used in training or validation.
+On the test session, the CNN named the correct writer for `r cnn_pct(cnn_test_accuracy)` of images (@tbl-cnn-accuracy), compared with 5% expected baseline (random guessing). Accuracy differed by digit (@tbl-cnn-by-digit): it was highest for digit `r cnn_digit$digit[1]` (`r cnn_pct(cnn_digit$accuracy[1])`) and lowest for digit `r cnn_digit$digit[5]` (`r cnn_pct(cnn_digit$accuracy[5])`). Each digit has 1000 test images from the single session that was not used in training or validation.
 
 #### Error analysis
 
@@ -170,8 +172,7 @@ Errors were concentrated in particular writers (@tbl-cnn-confusion). `r str_to_s
 
 #### Overfitting
 
-The CNN overfits the training sessions (@fig-cnn-history). Validation accuracy came within two percentage points of its maximum (`r cnn_pct(cnn_best_epoch$validation)`) by epoch `r cnn_plateau_epoch` and then stayed flat, while training accuracy kept rising to `r cnn_pct(max(cnn_results$history$train))` by the end of training at epoch `r nrow(cnn_results$history)`. The later epochs therefore fitted features of the training sessions that do not carry over to a new session. Validation accuracy did not fall, so the extra training did no harm, but it gave no benefit either. For this reason the hyperparameter search uses the earliest epoch whose validation accuracy is within one standard error of the best, rather than training for longer.
-
+The CNN overfits to the training sessions (@fig-cnn-history). Validation accuracy came within two percentage points of its maximum (`r cnn_pct(cnn_best_epoch$validation)`) by epoch `r cnn_plateau_epoch` and then stayed flat, while training accuracy kept rising to `r cnn_pct(max(cnn_results$history$train))` by the end of training at epoch `r nrow(cnn_results$history)`. The later epochs therefore appear to have fitted features of the training sessions that did not generalise to a new session. Validation accuracy did not fall, so the additional training gave no benefit. For this reason, the hyperparameter search uses the earliest epoch whose validation accuracy was within one standard error of the best observed value, rather than continuing training unnecessarily.
 
 
 ```{r}

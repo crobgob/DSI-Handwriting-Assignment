@@ -2,7 +2,7 @@
 
 <!-- Task 5 (Siamese part): grid search over m, learning rate, filters, and number of epochs trained using validation data to decide on final model. -->
 
-For the Siamese neural network, the margin size, $m$, the learning rate, and batch size were tuned using a grid search. The CNN encoder architecture and number of epochs was fixed. For each combination, the validation balanced accuracy was calculated at different thresholds and the threshold which maximised the balanced accuracy was chosen. The use of the same validation dataset to select the threshold and calculate the balanced accuracy is a limitation here. Ideally the validation dataset would be separated into two with one set used to calculate the threshold from and the other set used to calculate the balanced accuracy using that threshold. However, with pairs constructed from only four writers in the validation dataset, this dataset was too small to split. As in the CNN hyperparameter tuning, a coarse grid search (@fig-snn-hpo-coarse) using 36 combinations of hyperparameters and a a refined grid search (@fig-snn-hpo-refined) around the best region in the coarse grid using 9 combinations of hyperparameters were carried out. 
+For the Siamese neural network, the margin $m$, learning rate, and batch size were tuned using a grid search, while the CNN encoder architecture and number of epochs were fixed. For each hyperparameter combination, the validation balanced accuracy was calculated at different thresholds, and the threshold that maximised balanced accuracy was selected. However, using the same validation dataset to select the threshold and evaluate balanced accuracy is a limitation. Ideally, the validation data would be divided into two sets, with one used to calculate the threshold from and the other to evaluate balanced accuracy at that threshold. However, because the validation pairs were constructed from only four writers, this dataset was too small to split meaningfully. As with the CNN hyperparameter tuning, a coarse grid search using 36 combinations of hyperparameters (@fig-snn-hpo-coarse) was followed by a refined grid search involving 9 combinations around the best-performing region in the coarse grid (@fig-snn-hpo-refined). 
 
 ```{r}
 #| label: snn-hpo-cache
@@ -185,7 +185,7 @@ snn_hpo_coarse_batch_size <- readRDS(snn_hpo_coarse_file) %>%
 
 ```
 
-Once again, learning rate had the largest effect on balanced accuracy (@fig-snn-hpo-coarse). Averaged over the other two hyperparameters, balanced accuracy fell from `r snn_hpo_coarse_lr$balanced_accuracy[3]`% at a learning rate of 0.01 to `r snn_hpo_coarse_lr$balanced_accuracy[1]`% at 0.0001. Both margin (`r snn_hpo_coarse_m$balanced_accuracy[4]`% at $m$ = 2 up to `r snn_hpo_coarse_m$balanced_accuracy[1]`% at $m$ = 0.5) and the batch size (`r snn_hpo_coarse_batch_size$balanced_accuracy[3]`% for batch size of 128 to `r snn_hpo_coarse_batch_size$balanced_accuracy[1]`% for batch size of 32) had a smaller effect on balanced accuracy. The best learning rate and margin were at the edge of the grid (@fig-snn-hpo-coarse), so the refined grid extended both variables and fixed the batch size at 32 (@fig-snn-hpo-refined). Across both grids, the number of epochs was fixed at 5. 
+Once again, learning rate had the largest effect on balanced accuracy (@fig-snn-hpo-coarse). Averaged across the other two hyperparameters, balanced accuracy fell from `r snn_hpo_coarse_lr$balanced_accuracy[3]`% at a learning rate of 0.01 to `r snn_hpo_coarse_lr$balanced_accuracy[1]`% at 0.0001. Both the margin (`r snn_hpo_coarse_m$balanced_accuracy[4]`% at $m = 2$ up to `r snn_hpo_coarse_m$balanced_accuracy[1]`% at $m = 0.5$) and the batch size (`r snn_hpo_coarse_batch_size$balanced_accuracy[3]`% at a batch size of 128, compared with `r snn_hpo_coarse_batch_size$balanced_accuracy[1]`% at 32) had smaller effects on balanced accuracy. The best-performing learning rate and margin were at the edge of the coarse grid (@fig-snn-hpo-coarse), so the refined grid extended the ranges of both variables and fixed the batch size at 32 (@fig-snn-hpo-refined). The number of epochs was fixed at 5 across both grids. 
 
 ```{r}
 #| label: fig-snn-hpo-coarse
@@ -237,7 +237,7 @@ snn_best_refined <- readRDS(snn_hpo_refined_file) %>% arrange(desc(balanced_accu
 
 ```
 
-The hyperparameters which gave the highest balanced accuracy of `r round(snn_best_refined$balanced_accuracy*100, 2)`% selected from the refined search were a learning rate of `r snn_best_refined$learning_rate`, a margin of `r snn_best_refined$m` and a batch size of `r snn_best_refined$batch_size` (@tbl-snn-hpo-refined). 
+The hyperparameters selected from the refined grid search that achieved the highest balanced accuracy of `r round(snn_best_refined$balanced_accuracy*100, 2)`% were a learning rate of `r snn_best_refined$learning_rate`, a margin of `r snn_best_refined$m` and a batch size of `r snn_best_refined$batch_size` (@tbl-snn-hpo-refined). 
 
 ```{r}
 #| label: fig-snn-hpo-refined
@@ -306,8 +306,7 @@ readRDS(snn_hpo_all_file) %>%
 
 ```
 
-The model was retrained on the training data using the selected hyperparameters and used to predict on the test set. The balanced accuracy was calculated overall, by digit (@tbl-snn-hpo-test-digits), and by whether images were in the same or different sessions (@tbl-snn-hpo-test-sessions). Overall the tuned model yielded a higher balanced accuracy on the test dataset than the initial model. 
-[why is test accuracy higher than validation accuracy?]
+The model was retrained on the training data using the selected hyperparameters and was evaluated on the test set. Balanced accuracy was calculated overall, by digit (@tbl-snn-hpo-test-digits), and by whether the image pairs came from the same or different sessions (@tbl-snn-hpo-test-sessions). Overall, the tuned model achieved higher balanced accuracy on the test set than the initial model. [why is test accuracy higher than validation accuracy?]
 
 ```{r}
 #| label: snn-hpo-test-set
