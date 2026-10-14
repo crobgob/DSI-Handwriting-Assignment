@@ -129,7 +129,7 @@ table_form <- function(results_to_format) {
            across(balanced_accuracy, ~ 100 * .x)) %>%
     select(m, learning_rate, batch_size, balanced_accuracy) %>%
     head(10) %>%
-    kable(col.names = c("Margin", "Learning rate", "Batch size", "Balanced accuracy (%)"),
+    kable(col.names = c("Margin", "Learning rate", "Batch size", "Validation balanced accuracy (%)"),
           digits = 1, align = "r")
 }
   
@@ -306,7 +306,7 @@ readRDS(snn_hpo_all_file) %>%
 
 ```
 
-The model was retrained on the training data using the selected hyperparameters and was evaluated on the test set. Balanced accuracy was calculated overall, by digit (@tbl-snn-hpo-test-digits), and by whether the image pairs came from the same or different sessions (@tbl-snn-hpo-test-sessions). Overall, the tuned model achieved higher balanced accuracy on the test set than the initial model. [why is test accuracy higher than validation accuracy?]
+The model was retrained on the training data using the selected hyperparameters and was evaluated on the test set. Balanced accuracy was calculated overall, by digit (@tbl-snn-hpo-test-digits), and by whether the image pairs came from the same or different sessions (@tbl-snn-hpo-test-sessions). Interestingly, the test balanced accuracy was higher than the validation accuracy. This is likely due to different writers having different levels of variability in their handwriting style and the limited test and validation sets each only containing four writers. The test set may have had writers whose handwriting styles were more distinguishable from each others than the writers in the validation set. Overall, the tuned model achieved higher test balanced accuracy than that of the initial model. 
 
 ```{r}
 #| label: snn-hpo-test-set
@@ -418,8 +418,10 @@ for (i in 0:4) {
 }
 
 snn_hpo_test_results_table_digits %>%
-    mutate(across(c(Balanced_accuracy), ~ 100 * .x)) %>%
-    kable(digits = 3, align = "r", col.names = c("Digit", "Images", "Balanced accuracy"))
+  mutate(across(c(Balanced_accuracy), ~ 100 * .x)) %>%
+  arrange(desc(Balanced_accuracy)) %>%
+  arrange(Digit == "All digits") %>%
+  kable(digits = 1, align = "r", col.names = c("Digit", "Image pairs", "Test balanced accuracy (%)"))
 
 ```
 
@@ -464,8 +466,10 @@ for (i in c("Same session", "Different session")) {
 }
 
 snn_hpo_test_results_table_sessions %>%
-    mutate(across(c(Balanced_accuracy), ~ 100 * .x)) %>%
-    kable(digits = 3, align = "r", col.names = c("Session", "Images", "Balanced accuracy"))
+  mutate(across(c(Balanced_accuracy), ~ 100 * .x)) %>%
+  arrange(desc(Balanced_accuracy)) %>%
+  arrange(Session == "All sessions") %>%
+  kable(digits = 1, align = "r", col.names = c("Session", "Image pairs", "Test balanced accuracy (%)"))
 
 
 ```
