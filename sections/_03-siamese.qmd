@@ -41,8 +41,7 @@ The data were split into 60% training, 20% validation, and 20% test sets. Data w
 
 The shared CNN encoder consisted of two convolutional layers with 16 and 32 filters, respectively, each using a filter size of 3 and a ReLU activation function to introduce non-linearity. A max pooling layer with a pool size and stride of 2 was placed between these convolutional layers, followed by a global average pooling layer and a dense layer. The convolutional layers learn local image features while max pooling reduces the spatial dimensions of the feature maps. Global pooling converts the feature maps into a vector, while the dense layer maps to a 16-dimensional embedding. A relatively simple encoder is used since the input images are low-resolution and contain features such as curves and strokes that the network can learn from these images.
 
-In the Siamese model, pairs of images are passed through the shared encoder to produce their embeddings, and the Euclidean distance between each pair is then calculated. The model is compiled using the Adam optimiser and the contrastive loss function described above and the loss is averaged across each batch. The model is trained for 5 epochs with a batch size of 64.
-
+In the Siamese model, pairs of images are supplied to the encoder to produce their embeddings and then the Euclidean distance between each pair is calculated. The model was compiled using the Adam optimiser and used the above contrastive loss function which was calculated using the Euclidean distances and a margin of one, and averaged for every batch. Epoch was set to 5 and batch size to 64. 
 
 ```{r}
 #| label: encoderbuild
@@ -128,12 +127,9 @@ best_index <- which.max(threshold_scores) # index for the threshold that maximis
 threshold <- threshold_candidates[best_index] # threshold that maximises the balanced accuracy
 ```
 
-The Siamese model outputs the Euclidean distances between the embeddings of each digit pair. These distances are classified as indicating the same or different writer using a threshold determined from the validation pairs. We tested the observed distances between validation pairs as candidate thresholds and selected the threshold that maximised balanced accuracy on the validation set. The selected threshold was `r round(threshold, 2)`, giving a validation balanced accuracy of `r round(threshold_scores[best_index]*100, 2)`%. However, the small number of writers in the validation set limits the reliability of this threshold selection, as discussed in [Train, validation and test strategy](#train-validation-and-test-strategy).
+We compared the balanced accuracy for same and different digit pairs from the validation set at different Euclidean distance thresholds, and chose the threshold which maximised the balanced accuracy. The different thresholds tested were all the actual distances between the validation pairs. The selected threshold was `r round(threshold, 2)` giving a validation balanced accuracy of `r round(threshold_scores[best_index]*100, 2)`%. 
 
-The generalisability of the model was evaluated using digit image pairs from unseen writers in the test set, and balanced accuracy was calculated. Balanced accuracy was also calculated separately for each digit to assess how performance varied across digits (@tbl-snn-test-digits).
-
-When creating image pairs, we did not specify whether the images should come from the same or different sessions. Therefore, session combinations occurred in proportion to the distribution of images in same and different sessions in the test set (1,000 vs 4,000). Of the 5,000 test pairs, 1,003 pairs contained images from the same session and 3,997 from different sessions. Balanced accuracy was calculated separately for these two groups to assess how session differences affected performance (@tbl-snn-test-sessions). Examples of test pairs, along with their predicted and true labels, are shown in @fig-test-results.
-
+The generalisability of our model was evaluated by predicting on unseen writers' digit image-pairs in the test set and calculating the balanced accuracy. Balanced accuracy was also calculated by digit to assess how performance varied for different digits (@tbl-snn-test-digits). We did not specify whether images should be from the same or different sessions when creating pairs of images, thus whether the pair was from the same session was random with a ratio related to the proportion of images in the same and different sessions in the test set (1000 vs 4000). This resulted in the creation of 1003 pairs with images from the same session and 3997 with images from different sessions. The balanced accuracy was calculated separately for pairs in the same and different sessions to how session changes affects performance (@tbl-snn-test-sessions). Examples of pairs from the test batch with predicted and true values are shown in @fig-test-results.
 
 ```{r}
 #| label: snn-test

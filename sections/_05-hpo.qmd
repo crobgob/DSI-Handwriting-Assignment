@@ -306,7 +306,7 @@ readRDS(snn_hpo_all_file) %>%
 
 ```
 
-The model was retrained on the training data using the selected hyperparameters and was evaluated on the test set. Balanced accuracy was calculated overall, by digit (@tbl-snn-hpo-test-digits), and by whether the image pairs were came from the same or different sessions (@tbl-snn-hpo-test-sessions). Overall, the tuned model achieved higher balanced accuracy on the test set than the initial model. 
+The model was retrained on the training data using the selected hyperparameters and was evaluated on the test set. Balanced accuracy was calculated overall, by digit (@tbl-snn-hpo-test-digits), and by whether the image pairs came from the same or different sessions (@tbl-snn-hpo-test-sessions). Overall, the tuned model achieved higher balanced accuracy on the test set than the initial model. [why is test accuracy higher than validation accuracy?]
 
 ```{r}
 #| label: snn-hpo-test-set
