@@ -18,6 +18,7 @@ from handwritten digits with a CNN and a Siamese network. The brief is
 
    R packages will be pinned in `renv.lock` (not created yet). Once it exists,
    run `renv::restore()` after cloning.
+   Both CNNs and Siamese networks were fitted using the Keras framework via the *keras3* R package using the TensorFlow backend. The tidyverse package was utilised throughout the analysis for data manipulation and plotting using *ggplot2.*
 
 ## Layout
 
