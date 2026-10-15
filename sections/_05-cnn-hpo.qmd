@@ -295,25 +295,74 @@ bind_rows(
     summarise(digit = "All digits", n = n(), accuracy = 100 * mean(person_id == predicted))
 ) %>%
   knitr::kable(col.names = c("Digit", "Images", "Accuracy (%)"),
-               digits = 1, format.args = list(big.mark = ","), align = "lrr")
+               digits = 1, align = "lrr")
 
 cnn_hpo_test_accuracy <- mean(cnn_hpo_test$person_id == cnn_hpo_test$predicted)
 cnn_hpo_test_digit <- cnn_hpo_test %>% group_by(digit) %>% summarise(accuracy = mean(person_id == predicted))
 ```
 
 ```{r}
-#| label: tbl-cnn-hpo-writer
-#| tbl-cap: "Writer identification accuracy on the test session for each writer (250 images per writer), for the basic CNN and the tuned CNN."
+#| label: fig-cnn-hpo-writer
+#| fig-cap: "Writer identification accuracy on the test session for each writer, for the basic CNN and the tuned CNN, ordered from most to least accurately identified by the tuned CNN. Dashed blue line: overall accuracy of the tuned CNN. Dotted orange line: overall accuracy of the basic CNN. Grey line: accuracy expected from random guessing (5%)."
+#| fig-width: 7
+#| fig-height: 3.8
 
 cnn_hpo_writer <- full_join(
   cnn_test %>% group_by(person_id) %>% summarise(basic = mean(person_id == predicted)),
   cnn_hpo_test %>% group_by(person_id) %>% summarise(tuned = mean(person_id == predicted)),
   by = "person_id")
 
-cnn_hpo_writer %>%
-  mutate(across(c(basic, tuned), ~ 100 * .x)) %>%
-  knitr::kable(col.names = c("Writer", "Basic CNN accuracy (%)", "Tuned CNN accuracy (%)"),
-               digits = 1, align = "lrr")
+# Basic CNN: light fill with an orange outline; tuned CNN: solid blue. The two differ in
+# fill as well as hue, so they stay distinct in greyscale and for colour-blind readers.
+cnn_writer_colours <- c("Basic CNN" = "#eb6834", "Tuned CNN" = "#2a78d6")
+cnn_writer_fills <- c("Basic CNN" = "#fbd3c2", "Tuned CNN" = "#2a78d6")
+
+# Reference lines, labelled in the right margin. The two overall accuracies are close,
+# so the tuned label sits above its line and the basic label below.
+cnn_writer_refs <- tibble(y = c(cnn_hpo_test_accuracy, cnn_test_accuracy, 0.05),
+                          label = c(paste0("Tuned CNN\n", round(100 * cnn_hpo_test_accuracy), "% overall"),
+                                    paste0("Basic CNN\n", round(100 * cnn_test_accuracy), "% overall"),
+                                    "Chance 5%"),
+                          linetype = c("dashed", "dotted", "dotdash"),
+                          colour = c("#2a78d6", "#eb6834", "grey45"),
+                          vjust = c(-0.15, 1.15, 0.5))
+
+# Writers on the x axis in descending order of tuned accuracy, one bar per model
+cnn_writer_long <- cnn_hpo_writer %>%
+  mutate(person_id = fct_reorder(factor(person_id), tuned, .desc = TRUE)) %>%
+  pivot_longer(c(basic, tuned), names_to = "model", values_to = "accuracy") %>%
+  mutate(model = recode(model, basic = "Basic CNN", tuned = "Tuned CNN"))
+
+ggplot(cnn_writer_long, aes(x = person_id, y = accuracy)) +
+  geom_hline(data = cnn_writer_refs, aes(yintercept = y, linetype = linetype), colour = cnn_writer_refs$colour, linewidth = 0.5) +
+  geom_col(aes(fill = model, colour = model), position = position_dodge(width = 0.82), width = 0.76, linewidth = 0.5) +
+  # Writers neither model ever identified have no bars, so mark them with 0%
+  geom_text(data = cnn_writer_long %>% group_by(person_id) %>% filter(all(accuracy == 0)) %>% slice(1),
+            aes(label = "0%"), vjust = -0.1, size = 2.1, colour = "grey30") +
+  geom_text(data = cnn_writer_refs, aes(x = Inf, y = y, label = label, vjust = vjust), hjust = -0.1, lineheight = 0.9,
+            size = 2.7, colour = "grey30") +
+  scale_linetype_identity() +
+  scale_fill_manual(values = cnn_writer_fills) +
+  scale_colour_manual(values = cnn_writer_colours) +
+  scale_y_continuous(limits = c(0, 1), breaks = seq(0, 1, 0.25), labels = scales::percent,
+                     expand = expansion(mult = c(0, 0.02))) +
+  coord_cartesian(clip = "off") +
+  labs(title = paste("The tuned CNN beats the basic CNN for", sum(cnn_hpo_writer$tuned > cnn_hpo_writer$basic),
+                     "of", nrow(cnn_hpo_writer), "writers"),
+       subtitle = "Test-session accuracy per writer (250 images each), ordered by the tuned CNN",
+       x = "Writer", y = "Accuracy", fill = NULL, colour = NULL) +
+  theme_minimal(base_size = 10) +
+  theme(plot.title = element_text(face = "bold", size = 11),
+        plot.subtitle = element_text(colour = "grey35", size = 8.5, margin = margin(b = 6)),
+        plot.title.position = "plot",
+        legend.position = "top", legend.justification = "left", legend.key.size = unit(0.35, "cm"),
+        legend.margin = margin(0, 0, 0, 0),
+        panel.grid.major.x = element_blank(), panel.grid.minor = element_blank(),
+        panel.grid.major.y = element_line(colour = "grey90", linewidth = 0.3),
+        axis.line.x = element_line(colour = "grey40", linewidth = 0.4),
+        axis.text = element_text(colour = "grey35"),
+        axis.title = element_text(colour = "grey25"),
+        plot.margin = margin(5, 55, 5, 5))
 ```
 
-Retrained on sessions 1-4 with the selected hyperparameters, the CNN identified the writer correctly for `r cnn_hpo_pct(cnn_hpo_test_accuracy)` of test images (@tbl-cnn-hpo-test), compared with `r cnn_pct(cnn_test_accuracy)` for the untuned model. These results are not directly comparable, because the tuned model was also trained on one additional session. Test accuracy was lower than the CV estimate (`r cnn_hpo_pct(cnn_hpo_selected$accuracy_1se)`), which is expected because the CV estimate was also used to select the hyperparameters [@varma_2006] and because sessions may differ in difficulty. Accuracy across digits was more consistent than for the untuned model, ranging from `r cnn_hpo_pct(min(cnn_hpo_test_digit$accuracy))` to `r cnn_hpo_pct(max(cnn_hpo_test_digit$accuracy))`. By writer (@tbl-cnn-hpo-writer), the tuned model was more accurate than the basic model for `r sum(cnn_hpo_writer$tuned > cnn_hpo_writer$basic)` writers and less accurate for `r sum(cnn_hpo_writer$tuned < cnn_hpo_writer$basic)`; writers `r knitr::combine_words(cnn_hpo_writer$person_id[cnn_hpo_writer$basic <= 0.05 & cnn_hpo_writer$tuned <= 0.05])` were almost never correctly identified by either model.
+Retrained on sessions 1-4 with the selected hyperparameters, the CNN identified the writer correctly for `r cnn_hpo_pct(cnn_hpo_test_accuracy)` of test images (@tbl-cnn-hpo-test), compared with `r cnn_pct(cnn_test_accuracy)` for the untuned model. These results are not directly comparable, because the tuned model was also trained on one additional session. Test accuracy was lower than the CV estimate (`r cnn_hpo_pct(cnn_hpo_selected$accuracy_1se)`), which is expected because the CV estimate was also used to select the hyperparameters [@varma_2006] and because sessions may differ in difficulty. Accuracy across digits was more consistent than for the untuned model, ranging from `r cnn_hpo_pct(min(cnn_hpo_test_digit$accuracy))` to `r cnn_hpo_pct(max(cnn_hpo_test_digit$accuracy))`. By writer (@fig-cnn-hpo-writer), the tuned model was more accurate than the basic model for `r sum(cnn_hpo_writer$tuned > cnn_hpo_writer$basic)` writers and less accurate for `r sum(cnn_hpo_writer$tuned < cnn_hpo_writer$basic)`; writers `r knitr::combine_words(cnn_hpo_writer$person_id[cnn_hpo_writer$basic <= 0.05 & cnn_hpo_writer$tuned <= 0.05])` were almost never correctly identified by either model.
