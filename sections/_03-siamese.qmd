@@ -44,7 +44,18 @@ The shared CNN encoder consisted of two convolutional layers with 16 and 32 filt
 In the Siamese model, pairs of images are supplied to the encoder to produce their embeddings and then the Euclidean distance between each pair is calculated. The model was compiled using the Adam optimiser and used the above contrastive loss function which was calculated using the Euclidean distances and a margin of one, and averaged for every batch. Epoch was set to 5 and batch size to 64. 
 
 ```{r}
+#| label: snn-cache
+
+# After changing any of the training code, delete the files and render again.
+snn_original_validation_file <- "results/snn_original_validation.rds"
+snn_original_test_file <- "results/snn_original_test.rds"
+snn_run <- !file.exists(snn_original_validation_file) || !file.exists(snn_original_test_file) 
+
+```
+
+```{r}
 #| label: encoderbuild
+#| eval: !expr snn_run
 
 set_random_seed(25) # set random seed for tensorflow
 
@@ -64,6 +75,7 @@ encoder <- keras_model(image, z)
 
 ```{r}
 #| label: siamesebuild
+#| eval: !expr snn_run
 
 # a & b = describes pair of images supplied to model
 a <- layer_input(shape = c(28, 28, 1))
@@ -85,6 +97,7 @@ model <- keras_model(list(a, b), distance)
 
 ```{r}
 #| label: compile
+#| eval: !expr snn_run
 
 # Use Adam optimiser to compile model and contrastive loss function defined earlier
 model |> compile(
@@ -102,13 +115,22 @@ model |> fit(
   batch_size = 64,
   verbose=0
 )
+
+# Calculate the model predicted distances between the pairs in the validation data
+valid_distance <- as.numeric(predict(model, list(valid$left, valid$right), verbose = 0))
+
+# Calculate the model predicted distances between the pairs in the test data
+test_distance <- as.numeric(predict(model, list(test$left, test$right), verbose =0))
+
+saveRDS(valid_distance, snn_original_validation_file)
+saveRDS(test_distance, snn_original_test_file)
 ```
 
 ```{r}
 #| label: valid_dist
 
-# Calculate the model predicted distances between the pairs in the validation data
-valid_distance <- as.numeric(predict(model, list(valid$left, valid$right), verbose = 0))
+valid_distance <- readRDS(snn_original_validation_file)
+
 # Extract the observed labels for whether the pairs are the same or different for validation data
 valid_same <- as.logical(valid$y[, 1])
 
@@ -134,8 +156,8 @@ The generalisability of our model was evaluated by predicting on unseen writers'
 ```{r}
 #| label: snn-test
 
-# Calculate the model predicted distances between the pairs in the test data
-test_distance <- as.numeric(predict(model, list(test$left, test$right), verbose =0))
+test_distance <- readRDS(snn_original_test_file)
+
 # Extract the observed labels for whether the pairs are the same or different for test data
 true_same <- as.logical(test$y[, 1]) 
 
