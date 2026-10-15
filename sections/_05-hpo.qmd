@@ -323,6 +323,8 @@ learning_rate = snn_best_refined$learning_rate
 epochs = snn_best_refined$epochs
 batch_size = snn_best_refined$batch_size
 
+set_random_seed(25) # set random seed for tensorflow
+
 # Fit model using these hyperparameters
 image <- layer_input(shape = c(28, 28, 1)) # each image = 28x28, 1 image channel
 
@@ -353,8 +355,6 @@ contrastive_loss <- function(y, d) {
     y * op_square(d) + # squares each pair's distance - for same-writer pairs, penalises a large distance
       (1 - y) * op_square(op_maximum(m - d, 0))) # for diff writer pairs, penalises only if distance is < 1: if dist >=1, penalty is 0
 }
-
-set_random_seed(25)
 
 model |> compile(
   optimizer = optimizer_adam(learning_rate = learning_rate),
