@@ -16,6 +16,11 @@ snn_hpo_run_refined <- !file.exists(snn_hpo_refined_file)
 snn_hpo_run_all <- !file.exists(snn_hpo_all_file)
 snn_hpo_run_any <- snn_hpo_run_coarse || snn_hpo_run_refined || snn_hpo_run_all
 
+snn_hpo_validation_file <- "results/snn_hpo_validation.rds"
+snn_hpo_test_file <- "results/snn_hpo_test.rds"
+snn_hpo_run_predict <- !file.exists(snn_hpo_validation_file) || !file.exists(snn_hpo_test_file) 
+
+
 ```
 
 ```{r}
@@ -309,7 +314,8 @@ readRDS(snn_hpo_all_file) %>%
 The model was retrained on the training data using the selected hyperparameters and was evaluated on the test set. Balanced accuracy was calculated overall, by digit (@tbl-snn-hpo-test-digits), and by whether the image pairs came from the same or different sessions (@tbl-snn-hpo-test-sessions). Interestingly, the test balanced accuracy was higher than the validation accuracy. This is likely due to different writers having different levels of variability in their handwriting style and the limited test and validation sets each only containing four writers. The test set may have had writers whose handwriting styles were more distinguishable from each others than the writers in the validation set. Overall, the tuned model achieved higher test balanced accuracy than that of the initial model. 
 
 ```{r}
-#| label: snn-hpo-test-set
+#| label: snn-hpo-test-model
+#| eval: !expr snn_hpo_run_predict
 
 # Optimal hyperparameters
 m = snn_best_refined$m
@@ -365,7 +371,22 @@ model |> fit(
   verbose=0
 )
 
+# Calculate the model predicted distances between the pairs in the validation data
 valid_distance <- as.numeric(predict(model, list(valid$left, valid$right), verbose = 0))
+
+# Calculate the model predicted distances between the pairs in the test data
+test_distance <- as.numeric(predict(model, list(test$left, test$right), verbose = 0))
+
+saveRDS(valid_distance, snn_hpo_validation_file)
+saveRDS(test_distance, snn_hpo_test_file)
+
+```
+
+```{r}
+#| label: snn-hpo-test
+
+# Read in predictions on validation
+valid_distance <- readRDS(snn_hpo_validation_file)
 valid_same <- as.logical(valid$y[, 1])
 
 threshold_candidates <- sort(unique(valid_distance))
@@ -374,8 +395,8 @@ best_index <- which.max(threshold_scores)
 threshold <- threshold_candidates[best_index]
 balanced_accuracy <- threshold_scores[best_index]
 
-# Calculate the model predicted distances between the pairs in the test data
-test_distance <- as.numeric(predict(model, list(test$left, test$right), verbose = 0))
+# Read in predictions on test
+test_distance <- readRDS(snn_hpo_test_file)
 # Extract the observed labels for whether the pairs are the same or different for test data
 true_same <- as.logical(test$y[, 1]) 
 
