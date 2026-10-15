@@ -30,16 +30,16 @@ show_pair(pos_valid[1], valid_pairs, "Val: same writer")
 show_pair(neg_valid[1], valid_pairs, "Val: different writer")
 ```
 
-Here we used contrastive loss, a loss function introduced by @hadsell_2006, in the Siamese network. This loss function is more appropriate compared to triplet loss since the distinction between similar and dissimilar pairs is of interest rather than the relative ranking of dissimilarity of triplets. Additionally, this is a relatively simple verification task not a complex classification task like facial recognition, and the dataset is relatively small, thus the model should converge more easily using contrastive loss [@herman_2026]. The contrastive loss for a pair is:
+We used contrastive loss, introduced by @hadsell_2006, to train the Siamese network. This loss function was chosen over triplet loss because our interest is in distinguishing same-writer from different-writer pairs, rather than learning a relative ranking of dissimilarity between triplets. Additionally, this is a simple binary verification task and the dataset is relatively small. Contrastive loss may therefore be particularly suitable for this setting, given evidence that it can converge faster than triplet loss [@herman_2026]. The contrastive loss for a pair is:
 
 $$
 L = yD^2 + (1-y)\max(0,m-D)^2
 $$
-where $y$ is a binary label with $y = 1$ for a positive pair (i.e. same writer, same digit) and $D$ is the Euclidean distance between the embeddings. The hyperparameter $m$ sets the distance at which embeddings for similar pairs results in zero loss (i.e. where the distance reaches the margin) versus embeddings for dissimilar pairs resulting in a large loss, thereby optimising the network to minimise differences between image pairs from the same writer and maximising differences between image pairs from different writers [@Elaraby_2023]. The margin for the initial Siamese network was set as one, but was optimised in a hyperparameter search in [Hyperparameter optimisation](#hyperparameter-optimisation). 
+where $y$ is a binary label with $y = 1$ for a positive pair (i.e., the same writer and same digit) and $D$ is the Euclidean distance between the embeddings. The hyperparameter $m$ defines the margin: similar pairs incur near-zero loss when their embeddings are close ($d$ is small), while dissimilar pairs incur zero loss only if their distance is at least $m$. This encourages the network to minimise distances between embeddings from the same writer and maximise distances between embeddings from different writers, up to the margin [@Elaraby_2023]. The margin for the initial Siamese network was set as 1, but was optimised in a hyperparameter search in [Hyperparameter optimisation](#hyperparameter-optimisation).
 
-The data were split into 60% training, 20% validation, and 20% test sets. The data were grouped by writer with different writers in each set to ensure that the network learnt to recognise similarities in writing style but without leakage of specific writers to the validation and test set to test generalisability of the model. However, since there were only 20 writers, this split meant only 4 writers in each of the validation and test sets, which is a significant limitation and expanded on in [Train, validation and test strategy](#train-validation-and-test-strategy). 
+The data were split into 60% training, 20% validation, and 20% test sets. Data were grouped by writer, with different writers assigned to each set, to ensure that the network learnt to recognise similarities in writing style without exposure to the validation and test writers during training. This allowed the model's generalisability to unseen writers to be tested. However, since there were only 20 writers, this split meant that only 4 writers were included in each of the validation and test sets. This is a significant limitation and is discussed further in [Train, validation and test strategy](#train-validation-and-test-strategy).
 
-The shared CNN encoder architecture consisted of two convolutional layers with 16 and 32 filters respectively, both with a filter size of 3 and a ReLu activation function to introduce non-linearity, a max pooling layer between these convolutional layers with both a pool size and stride of 2, and at the end, a global average pooling layer and a dense layer. The convolutional layers learn local image features while max pooling reduces the dimensions of the feature maps. Global pooling converts the feature maps into a vector which is mapped to a 16-number embedding by the dense layer. A relatively simple encoder is used since the input images are low-resolution and contain easily learnable features such as curves and strokes [ref].
+The shared CNN encoder consisted of two convolutional layers with 16 and 32 filters, respectively, each using a filter size of 3 and a ReLU activation function to introduce non-linearity. A max pooling layer with a pool size and stride of 2 was placed between these convolutional layers. The convolutional layers learn local image features while max pooling reduces the spatial dimensions of the feature maps. The last two layers were a global average pooling layer which converts the feature maps into a vector and a dense layer mapping the vector to a 16-dimensional embedding. A relatively simple encoder is used since the input images are low-resolution and contain features such as curves and strokes that the network can learn from these images.
 
 In the Siamese model, pairs of images are supplied to the encoder to produce their embeddings and then the Euclidean distance between each pair is calculated. The model was compiled using the Adam optimiser and used the above contrastive loss function which was calculated using the Euclidean distances and a margin of one, and averaged for every batch. Epoch was set to 5 and batch size to 64. 
 
@@ -129,7 +129,7 @@ threshold <- threshold_candidates[best_index] # threshold that maximises the bal
 
 We compared the balanced accuracy for same and different digit pairs from the validation set at different Euclidean distance thresholds, and chose the threshold which maximised the balanced accuracy. The different thresholds tested were all the actual distances between the validation pairs. The selected threshold was `r round(threshold, 2)` giving a validation balanced accuracy of `r round(threshold_scores[best_index]*100, 2)`%. 
 
-The generalisability of our model was evaluated by predicting on unseen writers' digit image-pairs in the test set and calculating the balanced accuracy. Balanced accuracy was also calculated by digit to assess how performance varied for different digits (@tbl-snn-test-digits). We did not specify whether images should be from the same or different sessions when creating pairs of images, thus whether the pair was from the same session was random with a ratio related to the proportion of images in the same and different sessions in the test set (1000 vs 4000). This resulted in the creation of 1003 pairs with images from the same session and 3997 with images from different sessions. The balanced accuracy was calculated separately for pairs in the same and different sessions to how session changes affects performance (@tbl-snn-test-sessions). Examples of pairs from the test batch with predicted and true values are shown in @fig-test-results.
+The generalisability of our model was evaluated by predicting on unseen writers' digit image-pairs in the test set and calculating the balanced accuracy. Balanced accuracy was also calculated by digit to assess how performance varied for different digits (@tbl-snn-test-digits) and calculated separately for pairs in the same and different sessions to how session changes affects performance (@tbl-snn-test-sessions). We did not specify how many of each digit to be used nor whether images should be from the same or different sessions when creating pairs of images. Thus, the number of pairs of images of each digit, and whether the pair was from the same session or not were random with ratios related to the proportion images of each digit (1:1:1:1:1; @tbl-snn-test-digits) and the proportion of images in the same and different sessions in the test set (1:4; @tbl-snn-test-sessions). Examples of pairs from the test batch with predicted and true values are shown in @fig-test-results.
 
 ```{r}
 #| label: snn-test
@@ -146,7 +146,7 @@ snn_test_results <- balanced_accuracy_at(distance = test_distance, same = true_s
 
 ```{r}
 #| label: tbl-snn-test-digits
-#| tbl-cap: "Balanced accuracy for Siamese neural network predictions on pairs of images in the test set including a breakdown of balanced accuracy by digit."
+#| tbl-cap: "Balanced accuracy for Siamese neural network predictions on pairs of images in the test set including a breakdown of balanced accuracy by digit ordered from highest to lowest balanced accuracy."
 
 # Break down balanced accuracy by digit
 # Set up tibble for results with the first row the combined balanced accuracy
@@ -178,8 +178,10 @@ for (i in 0:4) {
 }
 
 snn_test_results_table_digits %>%
-    mutate(across(c(Balanced_accuracy), ~ 100 * .x)) %>%
-    kable(digits = 3, align = "r", col.names = c("Digit", "Images", "Balanced accuracy"))
+  mutate(across(c(Balanced_accuracy), ~ 100 * .x)) %>%
+  arrange(desc(Balanced_accuracy)) %>%
+  arrange(Digit == "All digits") %>%
+  kable(digits = 1, align = "r", col.names = c("Digit", "Image pairs", "Test balanced accuracy (%)"))
 
 ```
 
@@ -224,8 +226,10 @@ for (i in c("Same session", "Different session")) {
 }
 
 snn_test_results_table_sessions %>%
-    mutate(across(c(Balanced_accuracy), ~ 100 * .x)) %>%
-    kable(digits = 3, align = "r", col.names = c("Session", "Images", "Balanced accuracy"))
+  mutate(across(c(Balanced_accuracy), ~ 100 * .x)) %>%
+  arrange(desc(Balanced_accuracy)) %>%
+  arrange(Session == "All sessions") %>%
+  kable(digits = 1, align = "r", col.names = c("Session", "Image pairs", "Test balanced accuracy (%)"))
 
 
 ```

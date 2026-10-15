@@ -13,3 +13,5 @@ models/*
 .Rproj.user/
 
 **/*.quarto_ipynb
+
+.DS*
