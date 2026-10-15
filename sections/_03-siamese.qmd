@@ -39,7 +39,7 @@ where $y$ is a binary label with $y = 1$ for a positive pair (i.e., the same wri
 
 The data were split into 60% training, 20% validation, and 20% test sets. Data were grouped by writer, with different writers assigned to each set, to ensure that the network learnt to recognise similarities in writing style without exposure to the validation and test writers during training. This allowed the model's generalisability to unseen writers to be tested. However, since there were only 20 writers, this split meant that only 4 writers were included in each of the validation and test sets. This is a significant limitation and is discussed further in [Train, validation and test strategy](#train-validation-and-test-strategy).
 
-The shared CNN encoder consisted of two convolutional layers with 16 and 32 filters, respectively, each using a filter size of 3 and a ReLU activation function to introduce non-linearity. A max pooling layer with a pool size and stride of 2 was placed between these convolutional layers, followed by a global average pooling layer and a dense layer. The convolutional layers learn local image features while max pooling reduces the spatial dimensions of the feature maps. Global pooling converts the feature maps into a vector, while the dense layer maps to a 16-dimensional embedding. A relatively simple encoder is used since the input images are low-resolution and contain features such as curves and strokes that the network can learn from these images.
+The shared CNN encoder consisted of two convolutional layers with 16 and 32 filters, respectively, each using a filter size of 3 and a ReLU activation function to introduce non-linearity. A max pooling layer with a pool size and stride of 2 was placed between these convolutional layers. The convolutional layers learn local image features while max pooling reduces the spatial dimensions of the feature maps. The last two layers were a global average pooling layer which converts the feature maps into a vector and a dense layer mapping the vector to a 16-dimensional embedding. A relatively simple encoder is used since the input images are low-resolution and contain features such as curves and strokes that the network can learn from these images.
 
 In the Siamese model, pairs of images are supplied to the encoder to produce their embeddings and then the Euclidean distance between each pair is calculated. The model was compiled using the Adam optimiser and used the above contrastive loss function which was calculated using the Euclidean distances and a margin of one, and averaged for every batch. Epoch was set to 5 and batch size to 64. 
 
@@ -129,7 +129,7 @@ threshold <- threshold_candidates[best_index] # threshold that maximises the bal
 
 We compared the balanced accuracy for same and different digit pairs from the validation set at different Euclidean distance thresholds, and chose the threshold which maximised the balanced accuracy. The different thresholds tested were all the actual distances between the validation pairs. The selected threshold was `r round(threshold, 2)` giving a validation balanced accuracy of `r round(threshold_scores[best_index]*100, 2)`%. 
 
-The generalisability of our model was evaluated by predicting on unseen writers' digit image-pairs in the test set and calculating the balanced accuracy. Balanced accuracy was also calculated by digit to assess how performance varied for different digits (@tbl-snn-test-digits). We did not specify whether images should be from the same or different sessions when creating pairs of images, thus whether the pair was from the same session was random with a ratio related to the proportion of images in the same and different sessions in the test set (1000 vs 4000). This resulted in the creation of 1003 pairs with images from the same session and 3997 with images from different sessions. The balanced accuracy was calculated separately for pairs in the same and different sessions to how session changes affects performance (@tbl-snn-test-sessions). Examples of pairs from the test batch with predicted and true values are shown in @fig-test-results.
+The generalisability of our model was evaluated by predicting on unseen writers' digit image-pairs in the test set and calculating the balanced accuracy. Balanced accuracy was also calculated by digit to assess how performance varied for different digits (@tbl-snn-test-digits) and calculated separately for pairs in the same and different sessions to how session changes affects performance (@tbl-snn-test-sessions). We did not specify how many of each digit to be used nor whether images should be from the same or different sessions when creating pairs of images. Thus, the number of pairs of images of each digit, and whether the pair was from the same session or not were random with ratios related to the proportion images of each digit (1:1:1:1:1; @tbl-snn-test-digits) and the proportion of images in the same and different sessions in the test set (1:4; @tbl-snn-test-sessions). Examples of pairs from the test batch with predicted and true values are shown in @fig-test-results.
 
 ```{r}
 #| label: snn-test
@@ -146,7 +146,7 @@ snn_test_results <- balanced_accuracy_at(distance = test_distance, same = true_s
 
 ```{r}
 #| label: tbl-snn-test-digits
-#| tbl-cap: "Balanced accuracy for Siamese neural network predictions on pairs of images in the test set including a breakdown of balanced accuracy by digit."
+#| tbl-cap: "Balanced accuracy for Siamese neural network predictions on pairs of images in the test set including a breakdown of balanced accuracy by digit ordered from highest to lowest balanced accuracy."
 
 # Break down balanced accuracy by digit
 # Set up tibble for results with the first row the combined balanced accuracy
@@ -178,8 +178,10 @@ for (i in 0:4) {
 }
 
 snn_test_results_table_digits %>%
-    mutate(across(c(Balanced_accuracy), ~ 100 * .x)) %>%
-    kable(digits = 3, align = "r", col.names = c("Digit", "Images", "Balanced accuracy"))
+  mutate(across(c(Balanced_accuracy), ~ 100 * .x)) %>%
+  arrange(desc(Balanced_accuracy)) %>%
+  arrange(Digit == "All digits") %>%
+  kable(digits = 1, align = "r", col.names = c("Digit", "Image pairs", "Test balanced accuracy (%)"))
 
 ```
 
@@ -224,8 +226,10 @@ for (i in c("Same session", "Different session")) {
 }
 
 snn_test_results_table_sessions %>%
-    mutate(across(c(Balanced_accuracy), ~ 100 * .x)) %>%
-    kable(digits = 3, align = "r", col.names = c("Session", "Images", "Balanced accuracy"))
+  mutate(across(c(Balanced_accuracy), ~ 100 * .x)) %>%
+  arrange(desc(Balanced_accuracy)) %>%
+  arrange(Session == "All sessions") %>%
+  kable(digits = 1, align = "r", col.names = c("Session", "Image pairs", "Test balanced accuracy (%)"))
 
 
 ```
