@@ -2,7 +2,7 @@
 
 <!-- Task 5 (CNN part): coarse then refined grid search over learning rate, dropout and number of filters for the lecture model structure. 4-fold cross-validation over sessions 1-4. Session 5 is the test set and is only used once, for the selected combination. -->
 
-Three hyperparameters were tuned: learning rate, dropout rate and the number of filters in the two convolution layers. The layer structure and batch size were fixed. Each combination was scored by 4-fold cross-validation (CV) over sessions 1-4, holding out one session per fold; session 5 was not used. validation accuracy was recorded after every epoch and the number of epochs was set to the earliest epoch within one standard error (SE) of the best epoch, which guards against overfitting. A coarse grid was followed by a refined grid around its best region.
+Three hyperparameters were tuned: learning rate, dropout rate and the number of filters in the two convolution layers. The layer structure and batch size were fixed. Each combination was evaluated using four-fold cross-validation (CV) over sessions 1-4, with one session held out per fold; session 5 was not used. Validation accuracy was recorded after each epoch and the number of epochs was set to the earliest epoch within one standard error (SE) of the best observed validation accuracy to help guard against overfitting. A coarse grid search was followed by a refined grid search around its best-performing region.
 
 ```{r}
 #| label: cnn-hpo-cache
@@ -179,7 +179,7 @@ cnn_hpo_dropout <- cnn_hpo_effect(cnn_hpo_coarse, "dropout")
 cnn_hpo_filters <- cnn_hpo_effect(cnn_hpo_coarse, "filters")
 ```
 
-Learning rate had the largest effect (@fig-cnn-hpo-coarse): averaged over the other two hyperparameters, CV accuracy fell from `r cnn_hpo_pct(cnn_hpo_lr$accuracy[1])` at a learning rate of 0.0001 to `r cnn_hpo_pct(cnn_hpo_lr$accuracy[3])` at 0.01. Dropout had a small effect (`r cnn_hpo_pct(cnn_hpo_dropout$accuracy[1])` with no dropout, `r cnn_hpo_pct(cnn_hpo_dropout$accuracy[3])` at 0.5) and the number of filters had barely any effect (`r cnn_hpo_pct(min(cnn_hpo_filters$accuracy))` to `r cnn_hpo_pct(max(cnn_hpo_filters$accuracy))`). The best learning rate and dropout rate were both at the edge of the grid (@tbl-cnn-hpo-coarse), so the refined grid extended both and fixed the number of filters at the 16. Due to the lower learning rate, the refined grid used 40 epochs instead of 20.
+Learning rate had the largest effect on CV accuracy (@fig-cnn-hpo-coarse): averaged over the other two hyperparameters, CV accuracy fell from `r cnn_hpo_pct(cnn_hpo_lr$accuracy[1])` at a learning rate of 0.0001 to `r cnn_hpo_pct(cnn_hpo_lr$accuracy[3])` at 0.01. Dropout had a smaller effect (`r cnn_hpo_pct(cnn_hpo_dropout$accuracy[1])` with no dropout, `r cnn_hpo_pct(cnn_hpo_dropout$accuracy[3])` at 0.5), while the number of filters had little effect (`r cnn_hpo_pct(min(cnn_hpo_filters$accuracy))` to `r cnn_hpo_pct(max(cnn_hpo_filters$accuracy))`). The best-performing learning rate and dropout rate were both at the edge of the coarse grid (@tbl-cnn-hpo-coarse), so the refined grid extended the ranges of both hyperparameters and fixed the number of filters at 16. Due to the lower learning rate, the refined grid used 40 epochs instead of 20.
 
 #### Refined grid
 
@@ -225,15 +225,15 @@ cnn_hpo_selected <- bind_rows(coarse = cnn_hpo_coarse, refined = cnn_hpo_refined
 cnn_hpo_all <- bind_rows(cnn_hpo_coarse, cnn_hpo_refined)
 ```
 
-The refined grid was flat (@fig-cnn-hpo-refined): its nine combinations ranged only from `r cnn_hpo_pct(min(cnn_hpo_refined$best_accuracy))` to `r cnn_hpo_pct(max(cnn_hpo_refined$best_accuracy))`, less than the standard error of a single combination (about `r round(100 * mean(cnn_hpo_refined$best_se))` percentage points), so the search had reached a plateau.
+The refined grid showed little variation in CV accuracy (@fig-cnn-hpo-refined): its nine combinations ranged only from `r cnn_hpo_pct(min(cnn_hpo_refined$best_accuracy))` to `r cnn_hpo_pct(max(cnn_hpo_refined$best_accuracy))`, a range smaller than the standard error of a single combination (approximately `r round(100 * mean(cnn_hpo_refined$best_se))` percentage points). This suggested the search had reached a plateau.
 
 #### Selected model and sensitivity
 
-The combination with the highest CV accuracy was a learning rate of `r format(cnn_hpo_selected$learning_rate, scientific = FALSE, drop0trailing = TRUE)`, a dropout rate of `r cnn_hpo_selected$dropout` and `r cnn_hpo_selected$filters` filters (@tbl-cnn-hpo-refined). Its CV accuracy peaked at epoch `r cnn_hpo_selected$best_epoch` (`r cnn_hpo_pct(cnn_hpo_selected$best_accuracy)`) but was within one SE of that from epoch `r cnn_hpo_selected$epoch_1se` (`r cnn_hpo_pct(cnn_hpo_selected$accuracy_1se)`), so `r cnn_hpo_selected$epoch_1se` epochs were used (@fig-cnn-hpo-epochs).
+The hyperparameter combination with the highest CV accuracy had a learning rate of `r format(cnn_hpo_selected$learning_rate, scientific = FALSE, drop0trailing = TRUE)`, a dropout rate of `r cnn_hpo_selected$dropout` and `r cnn_hpo_selected$filters` filters (@tbl-cnn-hpo-refined). Its CV accuracy peaked at epoch `r cnn_hpo_selected$best_epoch` (`r cnn_hpo_pct(cnn_hpo_selected$best_accuracy)`) but was within one SE of that from epoch `r cnn_hpo_selected$epoch_1se` (`r cnn_hpo_pct(cnn_hpo_selected$accuracy_1se)`), so `r cnn_hpo_selected$epoch_1se` epochs were used (@fig-cnn-hpo-epochs).
 
-Across both grids CV accuracy ranged from `r cnn_hpo_pct(min(cnn_hpo_all$best_accuracy))` to `r cnn_hpo_pct(max(cnn_hpo_all$best_accuracy))`. Writer identification accuracy was therefore moderately sensitive to the learning rate, which accounts for most of that range, and insensitive to the dropout rate and the number of filters (looking at the values tried we tried). 
+Across both grids, CV accuracy ranged from `r cnn_hpo_pct(min(cnn_hpo_all$best_accuracy))` to `r cnn_hpo_pct(max(cnn_hpo_all$best_accuracy))`. Writer identification accuracy was therefore moderately sensitive to the learning rate, which accounted for most of this variation, but showed little sensitivity to dropout rate and number of filters across the values tested. 
 
-No combination created huge gains in model performance with the hyperparameter-tuned model only identifying the correct writer ~55% of the time. While this is better than random guessing the CNN still isn't very reliable for this task. Whether that is due to the model structure or the lack of data (total sessions = 5) is uncertain.
+No hyperparameter combination resulted in substantial improvement in model performance, with the hyperparameter-tuned model identifying the correct writer only around 55% of the time. Although this is better than random guessing, the model remains relatively unsuitable for the task. Whether this is due to the model architecture or the limited amount of data (only five sessions) is unclear.
 
 ```{r}
 #| label: fig-cnn-hpo-epochs
@@ -295,74 +295,25 @@ bind_rows(
     summarise(digit = "All digits", n = n(), accuracy = 100 * mean(person_id == predicted))
 ) %>%
   knitr::kable(col.names = c("Digit", "Images", "Accuracy (%)"),
-               digits = 1, align = "lrr")
+               digits = 1, format.args = list(big.mark = ","), align = "lrr")
 
 cnn_hpo_test_accuracy <- mean(cnn_hpo_test$person_id == cnn_hpo_test$predicted)
 cnn_hpo_test_digit <- cnn_hpo_test %>% group_by(digit) %>% summarise(accuracy = mean(person_id == predicted))
 ```
 
 ```{r}
-#| label: fig-cnn-hpo-writer
-#| fig-cap: "Writer identification accuracy on the test session for each writer, for the basic CNN and the tuned CNN, ordered from most to least accurately identified by the tuned CNN. Dashed blue line: overall accuracy of the tuned CNN. Dotted orange line: overall accuracy of the basic CNN. Grey line: accuracy expected from random guessing (5%)."
-#| fig-width: 7
-#| fig-height: 3.8
+#| label: tbl-cnn-hpo-writer
+#| tbl-cap: "Writer identification accuracy on the test session for each writer (250 images per writer), for the basic CNN and the tuned CNN."
 
 cnn_hpo_writer <- full_join(
   cnn_test %>% group_by(person_id) %>% summarise(basic = mean(person_id == predicted)),
   cnn_hpo_test %>% group_by(person_id) %>% summarise(tuned = mean(person_id == predicted)),
   by = "person_id")
 
-# Basic CNN: light fill with an orange outline; tuned CNN: solid blue. The two differ in
-# fill as well as hue, so they stay distinct in greyscale and for colour-blind readers.
-cnn_writer_colours <- c("Basic CNN" = "#eb6834", "Tuned CNN" = "#2a78d6")
-cnn_writer_fills <- c("Basic CNN" = "#fbd3c2", "Tuned CNN" = "#2a78d6")
-
-# Reference lines, labelled in the right margin. The two overall accuracies are close,
-# so the tuned label sits above its line and the basic label below.
-cnn_writer_refs <- tibble(y = c(cnn_hpo_test_accuracy, cnn_test_accuracy, 0.05),
-                          label = c(paste0("Tuned CNN\n", round(100 * cnn_hpo_test_accuracy), "% overall"),
-                                    paste0("Basic CNN\n", round(100 * cnn_test_accuracy), "% overall"),
-                                    "Chance 5%"),
-                          linetype = c("dashed", "dotted", "dotdash"),
-                          colour = c("#2a78d6", "#eb6834", "grey45"),
-                          vjust = c(-0.15, 1.15, 0.5))
-
-# Writers on the x axis in descending order of tuned accuracy, one bar per model
-cnn_writer_long <- cnn_hpo_writer %>%
-  mutate(person_id = fct_reorder(factor(person_id), tuned, .desc = TRUE)) %>%
-  pivot_longer(c(basic, tuned), names_to = "model", values_to = "accuracy") %>%
-  mutate(model = recode(model, basic = "Basic CNN", tuned = "Tuned CNN"))
-
-ggplot(cnn_writer_long, aes(x = person_id, y = accuracy)) +
-  geom_hline(data = cnn_writer_refs, aes(yintercept = y, linetype = linetype), colour = cnn_writer_refs$colour, linewidth = 0.5) +
-  geom_col(aes(fill = model, colour = model), position = position_dodge(width = 0.82), width = 0.76, linewidth = 0.5) +
-  # Writers neither model ever identified have no bars, so mark them with 0%
-  geom_text(data = cnn_writer_long %>% group_by(person_id) %>% filter(all(accuracy == 0)) %>% slice(1),
-            aes(label = "0%"), vjust = -0.1, size = 2.1, colour = "grey30") +
-  geom_text(data = cnn_writer_refs, aes(x = Inf, y = y, label = label, vjust = vjust), hjust = -0.1, lineheight = 0.9,
-            size = 2.7, colour = "grey30") +
-  scale_linetype_identity() +
-  scale_fill_manual(values = cnn_writer_fills) +
-  scale_colour_manual(values = cnn_writer_colours) +
-  scale_y_continuous(limits = c(0, 1), breaks = seq(0, 1, 0.25), labels = scales::percent,
-                     expand = expansion(mult = c(0, 0.02))) +
-  coord_cartesian(clip = "off") +
-  labs(title = paste("The tuned CNN beats the basic CNN for", sum(cnn_hpo_writer$tuned > cnn_hpo_writer$basic),
-                     "of", nrow(cnn_hpo_writer), "writers"),
-       subtitle = "Test-session accuracy per writer (250 images each), ordered by the tuned CNN",
-       x = "Writer", y = "Accuracy", fill = NULL, colour = NULL) +
-  theme_minimal(base_size = 10) +
-  theme(plot.title = element_text(face = "bold", size = 11),
-        plot.subtitle = element_text(colour = "grey35", size = 8.5, margin = margin(b = 6)),
-        plot.title.position = "plot",
-        legend.position = "top", legend.justification = "left", legend.key.size = unit(0.35, "cm"),
-        legend.margin = margin(0, 0, 0, 0),
-        panel.grid.major.x = element_blank(), panel.grid.minor = element_blank(),
-        panel.grid.major.y = element_line(colour = "grey90", linewidth = 0.3),
-        axis.line.x = element_line(colour = "grey40", linewidth = 0.4),
-        axis.text = element_text(colour = "grey35"),
-        axis.title = element_text(colour = "grey25"),
-        plot.margin = margin(5, 55, 5, 5))
+cnn_hpo_writer %>%
+  mutate(across(c(basic, tuned), ~ 100 * .x)) %>%
+  knitr::kable(col.names = c("Writer", "Basic CNN accuracy (%)", "Tuned CNN accuracy (%)"),
+               digits = 1, align = "lrr")
 ```
 
-Retrained on sessions 1-4 with the selected hyperparameters, the CNN identified the writer of `r cnn_hpo_pct(cnn_hpo_test_accuracy)` of test images (@tbl-cnn-hpo-test), compared with `r cnn_pct(cnn_test_accuracy)` for the untuned model. The two are not directly comparable, because the tuned model was also trained on one more session. Test accuracy was below the CV estimate (`r cnn_hpo_pct(cnn_hpo_selected$accuracy_1se)`), which is expected when the CV estimate was also used to select the hyperparameters [@varma_2006] and when sessions differ in difficulty. Accuracy by digit was more even than for the untuned model, ranging from `r cnn_hpo_pct(min(cnn_hpo_test_digit$accuracy))` to `r cnn_hpo_pct(max(cnn_hpo_test_digit$accuracy))`. By writer (@fig-cnn-hpo-writer), the tuned model was more accurate than the basic model for `r sum(cnn_hpo_writer$tuned > cnn_hpo_writer$basic)` writers and less accurate for `r sum(cnn_hpo_writer$tuned < cnn_hpo_writer$basic)`; writers `r knitr::combine_words(cnn_hpo_writer$person_id[cnn_hpo_writer$basic <= 0.05 & cnn_hpo_writer$tuned <= 0.05])` were almost never identified by either model.
+Retrained on sessions 1-4 with the selected hyperparameters, the CNN identified the writer correctly for `r cnn_hpo_pct(cnn_hpo_test_accuracy)` of test images (@tbl-cnn-hpo-test), compared with `r cnn_pct(cnn_test_accuracy)` for the untuned model. These results are not directly comparable, because the tuned model was also trained on one additional session. Test accuracy was lower than the CV estimate (`r cnn_hpo_pct(cnn_hpo_selected$accuracy_1se)`), which is expected because the CV estimate was also used to select the hyperparameters [@varma_2006] and because sessions may differ in difficulty. Accuracy across digits was more consistent than for the untuned model, ranging from `r cnn_hpo_pct(min(cnn_hpo_test_digit$accuracy))` to `r cnn_hpo_pct(max(cnn_hpo_test_digit$accuracy))`. By writer (@tbl-cnn-hpo-writer), the tuned model was more accurate than the basic model for `r sum(cnn_hpo_writer$tuned > cnn_hpo_writer$basic)` writers and less accurate for `r sum(cnn_hpo_writer$tuned < cnn_hpo_writer$basic)`; writers `r knitr::combine_words(cnn_hpo_writer$person_id[cnn_hpo_writer$basic <= 0.05 & cnn_hpo_writer$tuned <= 0.05])` were almost never correctly identified by either model.
