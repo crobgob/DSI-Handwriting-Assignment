@@ -9,6 +9,7 @@ bibliography: dsfi_a2.bib
 execute:
   warning: false
   message: false
+  echo: false
 ---
 
 ```{r}
