@@ -1,0 +1,11 @@
+ Group Project Information
+
+ (a) Group members & roles
+ Shirley Knight: introduction, split strategy, part of Siamese code & writing,
+ comparison of results, conclusion, editing of report.
+ Jess Prevost
+ Corey Webb
+
+ (b) Link to GitHub Pages website:
+
+ (c) Link to GitHub repository:
