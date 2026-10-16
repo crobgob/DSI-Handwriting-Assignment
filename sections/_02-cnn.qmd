@@ -4,8 +4,6 @@
 
 The prediction task is closed-set writer identification: given a single 28 x 28 image of a digit, the model predicts which of the 20 writers produced it. The CNN follows the structure of the lecture example (@tbl-cnn-structure). It was trained on sessions 1-3, with session 4 used for validation and to decide when to stop training. Session 5 was held out as the test set, ensuring that all test images come from a session not seen during training.
 
-The analysis was conducted in R version 4.6.1 [@R]. Both CNNs and Siamese networks were fitted using the Keras framework via the *keras3* R package [@keras3] using the TensorFlow backend [@tensorflow]. The tidyverse package [@tidyverse] was utilised throughout the analysis for data manipulation and plotting using *ggplot2.*
-
 ```{r}
 #| label: cnn-cache
 
