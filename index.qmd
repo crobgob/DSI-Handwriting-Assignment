@@ -43,4 +43,4 @@ source("R/splitData.R")
 
 {{< include sections/_08-plagiarism-declaration.qmd >}}
 
-{{< include sections/_09-ai-use-statement.qmd >}}
+{{< include sections/_09-ai-log.qmd >}}
