@@ -11,4 +11,6 @@ for each task in the brief.
 | 2026-10-08 | Corey | 2, 5, 8 | Claude | Tidying the presentation of results in `sections/_02-cnn.qmd` and `sections/_05-cnn-hpo.qmd`: `knitr::kable` tables with column headings and captions, figure captions and axis labels, `tbl-`/`fig-` labels for cross-referencing, and sub-headings. No change to models, training or results | | |
 | 2026-10-15 | Jess  | 3, 5 | ChatGPT | Identifying how to save models from SNN sections `sections/_03-siamese.qmd` and `sections/_05-hpo.qmd` (using save_model) but I actually ended up saving validation and test predictions rather than the model objects | | |
 | 2026-10-07 | Shirley | 3 | Claude | Basic formatting of the figures for the digit test predictions in `sections/_03.siamese.qmd` | | | 
+| 2026-10-12 | Shirley | Intro | ChatGPT | Help with referencing - putting into BibTex format, referencing in-text | Compared rendered reference to expected format | | 
 | 2026-10-14 | Shirley | 7 | ChatGPT | Assistance with Git and GitHub - problems with accidentally checking something in master branch | | | 
+| 2026-10-16 | Shirley | 8 | Claude | Proofreading final draft for final spelling, punctuation and grammatical errors | Used as a check before final confirmation by whole group | Minor fixes (e.g., double percent signs, no full stop)  kept |
