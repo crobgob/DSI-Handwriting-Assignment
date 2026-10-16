@@ -22,34 +22,17 @@ from handwritten digits with a CNN and a Siamese network. The brief is
 
 ## Layout
 
-| Path          | Contents                                                          | In git |
-|---------------|-------------------------------------------------------------------|--------|
-| `index.qmd`   | The report. Pulls in the files in `sections/`                     | yes    |
-| `sections/`   | One file per report section                                       | yes    |
-| `R/`          | Shared code: data loading, the split, pair construction           | yes    |
-| `_freeze/`    | Stored results of executed code, reused on render                 | yes    |
-| `data/`       | `handwriting.rds`                                                 | yes    |
-| `_site/`      | Rendered website                                                  | no     |
+| Path          | Contents                                                          
+|---------------|------------------------------------------------------------
+| `index.qmd`   | The report. Pulls in the files in `sections/`                     
+| `sections/`   | One file per report section                                       
+| `R/`          | Shared code: data loading, the split, pair construction           
+| `_freeze/`    | Stored results of executed code, reused on render                 
+| `data/`       | `handwriting.rds`                                                 
+| `_site/`      | Rendered website                                                 
 
 All paths in code are relative to the repo root.
 
-## Workflow
-
-`master` always renders. All work goes through a short-lived branch and a pull
-request with one approval.
-
-```bash
-git switch master && git pull
-git switch -c siamese-pairs
-# small commits as you go
-git push -u origin siamese-pairs     # then open a PR
-```
-
-- One PR does one thing and links its issue (`Closes #12`).
-- The reviewer renders the report, not just reads the diff.
-- Merge with a regular merge commit, not squash.
-- Methodological decisions are discussed in the issue thread.
-- Log LLM use in `sections/_09-ai-log.qmd` as you go.
 
 ## Rendering
 
