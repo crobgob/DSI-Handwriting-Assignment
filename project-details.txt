@@ -5,7 +5,7 @@
  comparison of results, conclusion, editing of report.
  Jess Prevost: EDA, part of Siamese code & writing, Siamese neural network hyperparameter tuning,
  small part of introduction, editing of report
- Corey Webb
+ Corey Webb: Github setup and troubleshooting, CNN, CNN hyperparameter tuning, editing of report
 
  All the decisions made and content of the sections were discussed during 6 team meetings
 

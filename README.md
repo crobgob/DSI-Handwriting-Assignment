@@ -27,11 +27,8 @@ from handwritten digits with a CNN and a Siamese network. The brief is
 | `index.qmd`   | The report. Pulls in the files in `sections/`                     | yes    |
 | `sections/`   | One file per report section                                       | yes    |
 | `R/`          | Shared code: data loading, the split, pair construction           | yes    |
-| `splits/`     | Saved train/val/test `image_id`s, read by every model             | yes    |
 | `_freeze/`    | Stored results of executed code, reused on render                 | yes    |
-| `ai-log.md`   | Running log for the AI use statement                              | yes    |
-| `data/`       | `handwriting.rds`                                                 | no     |
-| `models/`     | Saved model weights                                               | no     |
+| `data/`       | `handwriting.rds`                                                 | yes    |
 | `_site/`      | Rendered website                                                  | no     |
 
 All paths in code are relative to the repo root.
