@@ -1,7 +1,8 @@
 ## Plagiarism declaration {.unnumbered}
 
-<!-- Required by task 8. -->
-I know the meaning of plagiarism and declare that all of the work in the dissertation, save for that which is properly acknowledged, is my own. 
+<!-- Required by task 8. Text and signatures from PlagiarismDeclaration.docx. -->
+I know the meaning of plagiarism and declare that all of the work in the dissertation, save for that which is properly acknowledged, is my own.
 
 Signatures:
 
+![](images/signatures.png){width=260 fig-alt="Handwritten signatures of the group members"}

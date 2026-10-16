@@ -1,7 +1,7 @@
 project:
   type: website
   output-dir: _site
-  # Only the report is a page; README.md, ai-log.md and sections/_*.qmd are not.
+  # Only the report is a page; README.md and sections/_*.qmd are not.
   render:
     - index.qmd
 

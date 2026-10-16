@@ -49,7 +49,7 @@ git push -u origin siamese-pairs     # then open a PR
 - The reviewer renders the report, not just reads the diff.
 - Merge with a regular merge commit, not squash.
 - Methodological decisions are discussed in the issue thread.
-- Log LLM use in `ai-log.md` as you go.
+- Log LLM use in `sections/_09-ai-log.qmd` as you go.
 
 ## Rendering
 
