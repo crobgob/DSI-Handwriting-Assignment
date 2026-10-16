@@ -9,6 +9,6 @@
 
  All the decisions made and content of the sections were discussed during 6 team meetings
 
- (b) Link to GitHub Pages website:
+ (b) Link to GitHub Pages website:https://crobgob.github.io/DSI-Handwriting-Assignment/
 
  (c) Link to GitHub repository: https://github.com/crobgob/DSI-Handwriting-Assignment
