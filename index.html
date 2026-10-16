@@ -164,7 +164,7 @@ window.Quarto = {
   <li><a href="#comparing-the-cnn-and-siamese-results" id="toc-comparing-the-cnn-and-siamese-results" class="nav-link" data-scroll-target="#comparing-the-cnn-and-siamese-results"><span class="header-section-number">6</span> Comparing the CNN and Siamese results</a></li>
   <li><a href="#conclusion" id="toc-conclusion" class="nav-link" data-scroll-target="#conclusion"><span class="header-section-number">7</span> Conclusion</a></li>
   <li><a href="#plagiarism-declaration" id="toc-plagiarism-declaration" class="nav-link" data-scroll-target="#plagiarism-declaration">Plagiarism declaration</a></li>
-  <li><a href="#ai-use-statement" id="toc-ai-use-statement" class="nav-link" data-scroll-target="#ai-use-statement">AI use statement</a></li>
+  <li><a href="#ai-use-log" id="toc-ai-use-log" class="nav-link" data-scroll-target="#ai-use-log">AI use log</a></li>
   </ul>
 </nav>
     </div>
@@ -370,7 +370,7 @@ Figure&nbsp;4: Accuracy of the CNN after each epoch on the training sessions (1-
 </section>
 <section id="results-of-the-basic-cnn" class="level4" data-number="4.3.2">
 <h4 data-number="4.3.2" class="anchored" data-anchor-id="results-of-the-basic-cnn"><span class="header-section-number">4.3.2</span> Results of the basic CNN</h4>
-<p>On the test session, the CNN named the correct writer for 50.1% of images (<a href="#tbl-cnn-accuracy" class="quarto-xref">Table&nbsp;2</a>), compared with 5% expected baseline (random guessing). Accuracy differed by digit (<a href="#tbl-cnn-by-digit" class="quarto-xref">Table&nbsp;3</a>): it was highest for digit 2 (59.1%) and lowest for digit 0 (44.5%). Each digit has 1000 test images from the single session that was not used in training or validation.</p>
+<p>On the test session, the CNN named the correct writer for 50.1% of images (<a href="#tbl-cnn-accuracy" class="quarto-xref">Table&nbsp;2</a>), compared with 5% expected baseline (random guessing). Accuracy differed by digit (<a href="#tbl-cnn-by-digit" class="quarto-xref">Table&nbsp;3</a>): it was highest for digit <em>2</em> (59.1%) and lowest for digit <em>0</em> (44.5%). Each digit has 1000 test images from the single session that was not used in training or validation.</p>
 </section>
 <section id="error-analysis" class="level4" data-number="4.3.3">
 <h4 data-number="4.3.3" class="anchored" data-anchor-id="error-analysis"><span class="header-section-number">4.3.3</span> Error analysis</h4>
@@ -1307,7 +1307,7 @@ Figure&nbsp;8: Writer identification accuracy on the test session for each write
 <section id="writer-verification-with-a-siamese-network" class="level2" data-number="5">
 <h2 data-number="5" class="anchored" data-anchor-id="writer-verification-with-a-siamese-network"><span class="header-section-number">5</span> Writer verification with a Siamese network</h2>
 <!-- Task 3: contrastive or triplet loss; how training examples are constructed; matching performance. -->
-<p>A Siamese neural network was trained on the handwriting images and evaluated to assess how accurately it could capture whether two digits were written by the same writer. The data were split into 60% training, 20% validation, and 20% test sets. Data were grouped by writer, with different writers assigned to each set, to ensure that the network learnt to recognise similarities in writing style without exposure to the validation and test writers during training. This allowed the model’s generalisability to unseen writers to be tested. However, since there were only 20 writers, this split meant that only 4 writers were included in each of the validation and test sets. This is a significant limitation and is discussed further in <a href="#train-validation-and-test-strategy">Train, validation and test strategy</a>.</p>
+<p>A Siamese neural network was trained on the handwriting images and evaluated to assess how accurately it could capture whether two digits were written by the same writer.</p>
 <section id="pair-construction" class="level3" data-number="5.1">
 <h3 data-number="5.1" class="anchored" data-anchor-id="pair-construction"><span class="header-section-number">5.1</span> Pair construction</h3>
 <p>We controlled for digit identity by constructing pairs consisting of the same digits. Therefore, a positive pair for this network consisted of two different images of the same digit written by the same person, and a negative pair contained two images of the same digit but by different writers. Examples of pairs from the training and validation datasets are shown in <a href="#fig-pairs" class="quarto-xref">Figure&nbsp;9</a>. We employed a balanced pair sampling approach with half of the pairs being positive and the remaining half negative to ensure the Siamese network learned effectively <span class="citation" data-cites="chopra_2005">(<a href="#ref-chopra_2005" role="doc-biblioref">Chopra et al. 2005</a>)</span>.</p>
@@ -1331,7 +1331,7 @@ Figure&nbsp;9: Example training and validation pairs. Top row: training pairs (s
 <p>We used contrastive loss, introduced by <span class="citation" data-cites="hadsell_2006">Hadsell et al. (<a href="#ref-hadsell_2006" role="doc-biblioref">2006</a>)</span>, to train the Siamese network. This loss function was chosen over triplet loss because our interest is in distinguishing same-writer from different-writer pairs, rather than learning a relative ranking of dissimilarity between triplets. Additionally, this is a simple binary verification task and the dataset is relatively small. Contrastive loss may therefore be particularly suitable for this setting, given evidence that it can converge faster than triplet loss <span class="citation" data-cites="herman_2026">(<a href="#ref-herman_2026" role="doc-biblioref">Herman et al. 2026</a>)</span>. The contrastive loss for a pair is:</p>
 <p><span class="math display">\[
 L = yD^2 + (1-y)\max(0,m-D)^2
-\]</span> where <span class="math inline">\(y\)</span> is a binary label with <span class="math inline">\(y\)</span> = 1 for a positive pair (i.e., the same writer and same digit) and <span class="math inline">\(D\)</span> is the Euclidean distance between the embeddings. The hyperparameter <span class="math inline">\(m\)</span> defines the margin: similar pairs incur near-zero loss when their embeddings are close (<span class="math inline">\(d\)</span> is small), while dissimilar pairs incur zero loss only if their distance is at least <span class="math inline">\(m\)</span>. This encourages the network to minimise distances between embeddings from the same writer and maximise distances between embeddings from different writers, up to the margin <span class="citation" data-cites="Elaraby_2023">(<a href="#ref-Elaraby_2023" role="doc-biblioref">Elaraby et al. 2023</a>)</span>. The margin for the initial Siamese network was set to 1, but was optimised in a hyperparameter search in <a href="#hyperparameter-optimisation">Hyperparameter optimisation</a>.</p>
+\]</span> where <span class="math inline">\(y\)</span> is a binary label with <span class="math inline">\(y\)</span> = 1 for a positive pair (i.e., the same writer and same digit) and <span class="math inline">\(D\)</span> is the Euclidean distance between the embeddings. The hyperparameter <span class="math inline">\(m\)</span> defines the margin: similar pairs incur near-zero loss when their embeddings are close (<span class="math inline">\(d\)</span> is small), while dissimilar pairs incur zero loss only if their distance is at least <span class="math inline">\(m\)</span>. This encourages the network to minimise distances between embeddings from the same writer and maximise distances between embeddings from different writers, up to the margin <span class="citation" data-cites="Elaraby_2023">(<a href="#ref-Elaraby_2023" role="doc-biblioref">Elaraby et al. 2023</a>)</span>. The margin for the initial Siamese network was set to 1, but was optimised in a hyperparameter search.</p>
 <p>The shared CNN encoder consisted of two convolutional layers with 16 and 32 filters, respectively, each using a filter size of 3 and a ReLU activation function to introduce non-linearity. A max pooling layer with a pool size and stride of 2 was placed between these convolutional layers. The convolutional layers learn local image features while max pooling reduces the spatial dimensions of the feature maps. The last two layers were a global average pooling layer which converts the feature maps into a vector and a dense layer mapping the vector to a 16-dimensional embedding. A relatively simple encoder is used since the input images are low-resolution and contain features such as curves and strokes that the network can learn from these images.</p>
 </section>
 <section id="training-1" class="level3" data-number="5.3">
@@ -1718,17 +1718,116 @@ Table&nbsp;13: Balanced accuracy for tuned Siamese neural network predictions on
 </section>
 <section id="plagiarism-declaration" class="level2 unnumbered">
 <h2 class="unnumbered anchored" data-anchor-id="plagiarism-declaration">Plagiarism declaration</h2>
-<!-- Required by task 8. -->
+<!-- Required by task 8. Text and signatures from PlagiarismDeclaration.docx. -->
+<p>I know the meaning of plagiarism and declare that all of the work in the dissertation, save for that which is properly acknowledged, is my own.</p>
+<p>Signatures:</p>
+<p><img src="images/signatures.png" class="img-fluid" alt="Handwritten signatures of the group members" width="260"></p>
 </section>
-<section id="ai-use-statement" class="level2 unnumbered">
-
-<!-- Required by task 8. For each task: (a) tool used, (b) what for, (c) how outputs were verified, (d) how much was kept. Source: ai-log.md. -->
+<section id="ai-use-log" class="level2 unnumbered">
+<h2 class="unnumbered anchored" data-anchor-id="ai-use-log">AI use log</h2>
+<!-- Required by task 8. Add a row whenever you use an LLM: (a) tool used, (b) what for, (c) how outputs were verified, (d) how much was kept. -->
+<table class="caption-top table">
+<colgroup>
+<col style="width: 6%">
+<col style="width: 5%">
+<col style="width: 6%">
+<col style="width: 11%">
+<col style="width: 15%">
+<col style="width: 27%">
+<col style="width: 26%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Date</th>
+<th>Who</th>
+<th>Task</th>
+<th>(a) Tool</th>
+<th>(b) Used for</th>
+<th>(c) How it was checked</th>
+<th>(d) How much was kept</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>2026-10-02</td>
+<td>Corey</td>
+<td>7, 9</td>
+<td>Claude</td>
+<td>Git/GitHub workflow plan; generating the repo skeleton (folders, <code>_quarto.yml</code>, <code>.gitignore</code>, <code>R/</code> helper stubs, README)</td>
+<td></td>
+<td></td>
+</tr>
+<tr class="even">
+<td>2026-10-07</td>
+<td>Corey</td>
+<td>2, 7</td>
+<td>Claude</td>
+<td>Results caching in <code>sections/_02-cnn.qmd</code>: the training chunks run only when <code>results/cnn_cv.rds</code> is missing, so a full render reuses saved results and does not retrain the CNN</td>
+<td></td>
+<td></td>
+</tr>
+<tr class="odd">
+<td>2026-10-08</td>
+<td>Corey</td>
+<td>2, 5, 8</td>
+<td>Claude</td>
+<td>Tidying the presentation of results in <code>sections/_02-cnn.qmd</code> and <code>sections/_05-cnn-hpo.qmd</code>: <code>knitr::kable</code> tables with column headings and captions, figure captions and axis labels, <code>tbl-</code>/<code>fig-</code> labels for cross-referencing, and sub-headings. No change to models, training or results</td>
+<td></td>
+<td></td>
+</tr>
+<tr class="even">
+<td>2026-10-15</td>
+<td>Jess</td>
+<td>3, 5</td>
+<td>ChatGPT</td>
+<td>Identifying how to save models from SNN sections <code>sections/_03-siamese.qmd</code> and <code>sections/_05-hpo.qmd</code> (using save_model)</td>
+<td></td>
+<td>Ended up saving validation and test predictions rather than the model objects</td>
+</tr>
+<tr class="odd">
+<td>2026-10-07</td>
+<td>Shirley</td>
+<td>3</td>
+<td>Claude</td>
+<td>Basic formatting of the figures for the digit test predictions in <code>sections/_03.siamese.qmd</code></td>
+<td></td>
+<td></td>
+</tr>
+<tr class="even">
+<td>2026-10-12</td>
+<td>Shirley</td>
+<td>Intro</td>
+<td>ChatGPT</td>
+<td>Help with referencing - putting into BibTex format, referencing in-text</td>
+<td>Compared rendered reference to expected format</td>
+<td></td>
+</tr>
+<tr class="odd">
+<td>2026-10-14</td>
+<td>Shirley</td>
+<td>7</td>
+<td>ChatGPT</td>
+<td>Assistance with Git and GitHub - problems with accidentally checking something in master branch</td>
+<td></td>
+<td></td>
+</tr>
+<tr class="even">
+<td>2026-10-16</td>
+<td>Shirley</td>
+<td>8</td>
+<td>Claude</td>
+<td>Proofreading final draft for final spelling, punctuation and grammatical errors</td>
+<td>Used as a check before final confirmation by whole group</td>
+<td>Minor fixes (e.g., double percent signs, no full stop) kept</td>
+</tr>
+</tbody>
+</table>
 
 
 
 </section>
 
-<div id="quarto-appendix" class="default"><section class="quarto-appendix-contents" role="doc-bibliography" id="quarto-bibliography"><h2 class="anchored quarto-appendix-heading">AI use statement</h2><div id="refs" class="references csl-bib-body hanging-indent" role="list">
+<div id="quarto-appendix" class="default"><section class="quarto-appendix-contents" role="doc-bibliography" id="quarto-bibliography"><h2 class="anchored quarto-appendix-heading">References</h2><div id="refs" class="references csl-bib-body hanging-indent" role="list">
 <div id="ref-Abushahla2026" class="csl-entry" role="listitem">
 <span class="nocase">Abushahla, H. A., A. J. N. Panopio, L. Al-Khairulla, et al.</span> 2026. <span>“Different Strokes for Different Folks: Writer Identification for Historical Arabic Manuscripts.”</span> <em>International Journal on Document Analysis and Recognition</em>, ahead of print. <a href="https://doi.org/10.1007/s10032-026-00596-4">https://doi.org/10.1007/s10032-026-00596-4</a>.
 </div>
