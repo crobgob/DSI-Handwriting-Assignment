@@ -2,7 +2,7 @@
 
 <!-- Task 5 (Siamese part): grid search over m, learning rate, filters, and number of epochs trained using validation data to decide on final model. -->
 
-For the Siamese neural network, the margin $m$, learning rate, and batch size were tuned using a grid search, while the CNN encoder architecture and number of epochs were fixed. For each hyperparameter combination, the validation balanced accuracy was calculated at different thresholds, and the threshold that maximised balanced accuracy was selected. However, using the same validation dataset to select the threshold and evaluate balanced accuracy is a limitation. Ideally, the validation data would be divided into two sets, with one used to calculate the threshold from and the other to evaluate balanced accuracy at that threshold. However, because the validation pairs were constructed from only four writers, this dataset was too small to split meaningfully. As with the CNN hyperparameter tuning, a coarse grid search using 36 combinations of hyperparameters (@fig-snn-hpo-coarse) was followed by a refined grid search involving 9 combinations around the best-performing region in the coarse grid (@fig-snn-hpo-refined). 
+For the Siamese neural network, the margin $m$, learning rate, and batch size were tuned using a grid search, while the CNN encoder architecture and number of epochs were fixed. For each hyperparameter combination, the validation balanced accuracy was calculated at different thresholds, and the threshold that maximised balanced accuracy was selected. Using the same validation dataset to select the threshold and evaluate balanced accuracy is a limitation. Ideally, the validation data would be divided into two sets, with one used to calculate the threshold from and the other to evaluate balanced accuracy at that threshold. However, because the validation pairs were constructed from only four writers, this dataset was too small to split meaningfully. As with the CNN hyperparameter tuning, a coarse grid search using 36 combinations of hyperparameters (@fig-snn-hpo-coarse) was followed by a refined grid search involving 9 combinations around the best-performing region in the coarse grid (@fig-snn-hpo-refined). 
 
 ```{r}
 #| label: snn-hpo-cache
@@ -133,7 +133,7 @@ table_form <- function(results_to_format) {
     mutate(learning_rate = format(learning_rate, scientific = FALSE, drop0trailing = TRUE),
            across(balanced_accuracy, ~ 100 * .x)) %>%
     select(m, learning_rate, batch_size, balanced_accuracy) %>%
-    head(10) %>%
+    head(5) %>%
     kable(col.names = c("Margin", "Learning rate", "Batch size", "Validation balanced accuracy (%)"),
           digits = 1, align = "r")
 }
@@ -260,7 +260,7 @@ figure_form(readRDS(snn_hpo_refined_file))
 
 ```{r}
 #| label: tbl-snn-hpo-refined
-#| tbl-cap: "Refined grid search results, from highest to lowest balanced accuracy."
+#| tbl-cap: "The five hyperparameter combinations with the highest balanced accuracy in the refined grid search (9 combinations)."
 
 table_form(readRDS(snn_hpo_refined_file))
 ```

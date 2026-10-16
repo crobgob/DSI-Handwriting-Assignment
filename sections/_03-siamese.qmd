@@ -1,9 +1,11 @@
 ## Writer verification with a Siamese network
 
 <!-- Task 3: contrastive or triplet loss; how training examples are constructed; matching performance. -->
-### Training examples construction
 
-A Siamese neural network was trained on the handwriting images and evaluated to assess how accurately it could capture whether two digits were written by the same writer. We controlled for digit identity by constructing pairs consisting of the same digits. Therefore, a positive pair for this network consisted of two different images of the same digit written by the same person, and a negative pair contained two images of the same digit but by different writers. Examples of pairs from the training and validation datasets are shown in @fig-pairs. We employed a balanced pair sampling approach with half of the pairs being positive and the remaining half negative to ensure the Siamese network learned effectively [@chopra_2005].
+A Siamese neural network was trained on the handwriting images and evaluated to assess how accurately it could capture whether two digits were written by the same writer. The data were split into 60% training, 20% validation, and 20% test sets. Data were grouped by writer, with different writers assigned to each set, to ensure that the network learnt to recognise similarities in writing style without exposure to the validation and test writers during training. This allowed the model's generalisability to unseen writers to be tested. However, since there were only 20 writers, this split meant that only 4 writers were included in each of the validation and test sets. This is a significant limitation and is discussed further in [Train, validation and test strategy](#train-validation-and-test-strategy).
+
+### Pair construction
+We controlled for digit identity by constructing pairs consisting of the same digits. Therefore, a positive pair for this network consisted of two different images of the same digit written by the same person, and a negative pair contained two images of the same digit but by different writers. Examples of pairs from the training and validation datasets are shown in @fig-pairs. We employed a balanced pair sampling approach with half of the pairs being positive and the remaining half negative to ensure the Siamese network learned effectively [@chopra_2005].
 
 ```{r}
 #| label: fig-pairs
@@ -40,8 +42,6 @@ $$
 L = yD^2 + (1-y)\max(0,m-D)^2
 $$
 where $y$ is a binary label with $y$ = 1 for a positive pair (i.e., the same writer and same digit) and $D$ is the Euclidean distance between the embeddings. The hyperparameter $m$ defines the margin: similar pairs incur near-zero loss when their embeddings are close ($d$ is small), while dissimilar pairs incur zero loss only if their distance is at least $m$. This encourages the network to minimise distances between embeddings from the same writer and maximise distances between embeddings from different writers, up to the margin [@Elaraby_2023]. The margin for the initial Siamese network was set to 1, but was optimised in a hyperparameter search in [Hyperparameter optimisation](#hyperparameter-optimisation).
-
-The data were split into 60% training, 20% validation, and 20% test sets. Data were grouped by writer, with different writers assigned to each set, to ensure that the network learnt to recognise similarities in writing style without exposure to the validation and test writers during training. This allowed the model's generalisability to unseen writers to be tested. However, since there were only 20 writers, this split meant that only 4 writers were included in each of the validation and test sets. This is a significant limitation and is discussed further in [Train, validation and test strategy](#train-validation-and-test-strategy).
 
 The shared CNN encoder consisted of two convolutional layers with 16 and 32 filters, respectively, each using a filter size of 3 and a ReLU activation function to introduce non-linearity. A max pooling layer with a pool size and stride of 2 was placed between these convolutional layers. The convolutional layers learn local image features while max pooling reduces the spatial dimensions of the feature maps. The last two layers were a global average pooling layer which converts the feature maps into a vector and a dense layer mapping the vector to a 16-dimensional embedding. A relatively simple encoder is used since the input images are low-resolution and contain features such as curves and strokes that the network can learn from these images.
 

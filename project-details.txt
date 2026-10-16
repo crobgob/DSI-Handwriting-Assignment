@@ -1,11 +1,14 @@
  Group Project Information
 
  (a) Group members & roles
- Shirley Knight: introduction, split strategy, part of Siamese code & writing,
+ Shirley Knight: introduction, split strategy, part of Siamese neural network code & writing,
  comparison of results, conclusion, editing of report.
- Jess Prevost
+ Jess Prevost: EDA, part of Siamese code & writing, Siamese neural network hyperparameter tuning,
+ small part of introduction, editing of report
  Corey Webb
+
+ All the decisions made and content of the sections were discussed during 6 team meetings
 
  (b) Link to GitHub Pages website:
 
- (c) Link to GitHub repository:
+ (c) Link to GitHub repository: https://github.com/crobgob/DSI-Handwriting-Assignment

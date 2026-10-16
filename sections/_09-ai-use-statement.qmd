@@ -1,3 +1,4 @@
 ## AI use statement {.unnumbered}
 
 <!-- Required by task 8. For each task: (a) tool used, (b) what for, (c) how outputs were verified, (d) how much was kept. Source: ai-log.md. -->
+
