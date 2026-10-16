@@ -162,7 +162,7 @@ In real-world terms, accuracy represents the proportion of handwritten digit ima
 
 #### Results of the basic CNN
 
-On the test session, the CNN named the correct writer for `r cnn_pct(cnn_test_accuracy)` of images (@tbl-cnn-accuracy), compared with 5% expected baseline (random guessing). Accuracy differed by digit (@tbl-cnn-by-digit): it was highest for digit `r cnn_digit$digit[1]` (`r cnn_pct(cnn_digit$accuracy[1])`) and lowest for digit `r cnn_digit$digit[5]` (`r cnn_pct(cnn_digit$accuracy[5])`). Each digit has 1000 test images from the single session that was not used in training or validation.
+On the test session, the CNN named the correct writer for `r cnn_pct(cnn_test_accuracy)` of images (@tbl-cnn-accuracy), compared with 5% expected baseline (random guessing). Accuracy differed by digit (@tbl-cnn-by-digit): it was highest for digit *`r cnn_digit$digit[1]`* (`r cnn_pct(cnn_digit$accuracy[1])`) and lowest for digit *`r cnn_digit$digit[5]`* (`r cnn_pct(cnn_digit$accuracy[5])`). Each digit has 1000 test images from the single session that was not used in training or validation.
 
 #### Error analysis
 
