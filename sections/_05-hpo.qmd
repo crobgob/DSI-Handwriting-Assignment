@@ -190,7 +190,9 @@ snn_hpo_coarse_batch_size <- readRDS(snn_hpo_coarse_file) %>%
 
 ```
 
-Once again, learning rate had the largest effect on balanced accuracy (@fig-snn-hpo-coarse). Averaged across the other two hyperparameters, balanced accuracy fell from `r snn_hpo_coarse_lr$balanced_accuracy[3]`% at a learning rate of 0.01 to `r snn_hpo_coarse_lr$balanced_accuracy[1]`% at 0.0001. Both the margin (`r snn_hpo_coarse_m$balanced_accuracy[4]`% at $m = 2$ up to `r snn_hpo_coarse_m$balanced_accuracy[1]`% at $m = 0.5$) and the batch size (`r snn_hpo_coarse_batch_size$balanced_accuracy[3]`% at a batch size of 128, compared with `r snn_hpo_coarse_batch_size$balanced_accuracy[1]`% at 32) had smaller effects on balanced accuracy. The best-performing learning rate and margin were at the edge of the coarse grid (@fig-snn-hpo-coarse), so the refined grid extended the ranges of both variables and fixed the batch size at 32 (@fig-snn-hpo-refined). The number of epochs was fixed at 5 across both grids. 
+#### Coarse grid
+
+Once again, learning rate had the largest effect on balanced accuracy (@fig-snn-hpo-coarse). Averaged across the other two hyperparameters, balanced accuracy fell from `r snn_hpo_coarse_lr$balanced_accuracy[3]`% at a learning rate of 0.01 to `r snn_hpo_coarse_lr$balanced_accuracy[1]`% at 0.0001. Both the margin (`r snn_hpo_coarse_m$balanced_accuracy[4]`% at $m$ = 2 up to `r snn_hpo_coarse_m$balanced_accuracy[1]`% at $m$ = 0.5) and the batch size (`r snn_hpo_coarse_batch_size$balanced_accuracy[3]`% at a batch size of 128, compared with `r snn_hpo_coarse_batch_size$balanced_accuracy[1]`% at 32) had smaller effects on balanced accuracy. The best-performing learning rate and margin were at the edge of the coarse grid (@fig-snn-hpo-coarse), so the refined grid extended the ranges of both variables and fixed the batch size at 32 (@fig-snn-hpo-refined). The number of epochs was fixed at 5 across both grids. 
 
 ```{r}
 #| label: fig-snn-hpo-coarse
@@ -241,6 +243,8 @@ snn_hpo_refined_m <- readRDS(snn_hpo_refined_file) %>%
 snn_best_refined <- readRDS(snn_hpo_refined_file) %>% arrange(desc(balanced_accuracy)) %>% head(1)
 
 ```
+
+#### Refined grid 
 
 The hyperparameters selected from the refined grid search that achieved the highest balanced accuracy of `r round(snn_best_refined$balanced_accuracy*100, 2)`% were a learning rate of `r snn_best_refined$learning_rate`, a margin of `r snn_best_refined$m` and a batch size of `r snn_best_refined$batch_size` (@tbl-snn-hpo-refined). 
 
@@ -311,7 +315,9 @@ readRDS(snn_hpo_all_file) %>%
 
 ```
 
-The model was retrained on the training data using the selected hyperparameters and was evaluated on the test set. Balanced accuracy was calculated overall, by digit (@tbl-snn-hpo-test-digits), and by whether the image pairs came from the same or different sessions (@tbl-snn-hpo-test-sessions). Interestingly, the test balanced accuracy was higher than the validation accuracy. This is likely due to different writers having different levels of variability in their handwriting style and the limited test and validation sets each only containing four writers. The test set may have had writers whose handwriting styles were more distinguishable from each others than the writers in the validation set. Overall, the tuned model achieved higher test balanced accuracy than that of the initial model. 
+#### Selected model and sensitivity
+
+The model was retrained on the training data using the selected hyperparameters and was evaluated on the test set. Balanced accuracy was calculated overall, by digit (@tbl-snn-hpo-test-digits), and by whether the image pairs came from the same or different sessions (@tbl-snn-hpo-test-sessions). Interestingly, the test balanced accuracy was higher than the validation accuracy. This is likely due to different writers having different levels of variability in their handwriting style and the limited test and validation sets each only containing four writers. The test set may have had writers whose handwriting styles were more distinguishable from each other than the writers in the validation set. Overall, the tuned model achieved higher test balanced accuracy than that of the initial model. 
 
 ```{r}
 #| label: snn-hpo-test-model
