@@ -1,12 +1,15 @@
 ## Writer verification with a Siamese network
 
 <!-- Task 3: contrastive or triplet loss; how training examples are constructed; matching performance. -->
+### Training examples construction
 
 A Siamese neural network was trained on the handwriting images and evaluated to assess how accurately it could capture whether two digits were written by the same writer. We controlled for digit identity by constructing pairs consisting of the same digits. Therefore, a positive pair for this network consisted of two different images of the same digit written by the same person, and a negative pair contained two images of the same digit but by different writers. Examples of pairs from the training and validation datasets are shown in @fig-pairs. We employed a balanced pair sampling approach with half of the pairs being positive and the remaining half negative to ensure the Siamese network learned effectively [@chopra_2005].
 
 ```{r}
 #| label: fig-pairs
 #| fig-cap: "Example training and validation pairs. Top row: training pairs (same writer left, different writer right). Bottom row: validation pairs (same writer left, different writer right)."
+#| fig-width: 5.5
+#| fig-height: 5
 
 par(mfrow = c(2, 4), mar = c(1, 1, 2, 1))
 
@@ -30,18 +33,21 @@ show_pair(pos_valid[1], valid_pairs, "Val: same writer")
 show_pair(neg_valid[1], valid_pairs, "Val: different writer")
 ```
 
+### Model structure
 We used contrastive loss, introduced by @hadsell_2006, to train the Siamese network. This loss function was chosen over triplet loss because our interest is in distinguishing same-writer from different-writer pairs, rather than learning a relative ranking of dissimilarity between triplets. Additionally, this is a simple binary verification task and the dataset is relatively small. Contrastive loss may therefore be particularly suitable for this setting, given evidence that it can converge faster than triplet loss [@herman_2026]. The contrastive loss for a pair is:
 
 $$
 L = yD^2 + (1-y)\max(0,m-D)^2
 $$
-where $y$ is a binary label with $y = 1$ for a positive pair (i.e., the same writer and same digit) and $D$ is the Euclidean distance between the embeddings. The hyperparameter $m$ defines the margin: similar pairs incur near-zero loss when their embeddings are close ($d$ is small), while dissimilar pairs incur zero loss only if their distance is at least $m$. This encourages the network to minimise distances between embeddings from the same writer and maximise distances between embeddings from different writers, up to the margin [@Elaraby_2023]. The margin for the initial Siamese network was set as 1, but was optimised in a hyperparameter search in [Hyperparameter optimisation](#hyperparameter-optimisation).
+where $y$ is a binary label with $y$ = 1 for a positive pair (i.e., the same writer and same digit) and $D$ is the Euclidean distance between the embeddings. The hyperparameter $m$ defines the margin: similar pairs incur near-zero loss when their embeddings are close ($d$ is small), while dissimilar pairs incur zero loss only if their distance is at least $m$. This encourages the network to minimise distances between embeddings from the same writer and maximise distances between embeddings from different writers, up to the margin [@Elaraby_2023]. The margin for the initial Siamese network was set to 1, but was optimised in a hyperparameter search in [Hyperparameter optimisation](#hyperparameter-optimisation).
 
 The data were split into 60% training, 20% validation, and 20% test sets. Data were grouped by writer, with different writers assigned to each set, to ensure that the network learnt to recognise similarities in writing style without exposure to the validation and test writers during training. This allowed the model's generalisability to unseen writers to be tested. However, since there were only 20 writers, this split meant that only 4 writers were included in each of the validation and test sets. This is a significant limitation and is discussed further in [Train, validation and test strategy](#train-validation-and-test-strategy).
 
 The shared CNN encoder consisted of two convolutional layers with 16 and 32 filters, respectively, each using a filter size of 3 and a ReLU activation function to introduce non-linearity. A max pooling layer with a pool size and stride of 2 was placed between these convolutional layers. The convolutional layers learn local image features while max pooling reduces the spatial dimensions of the feature maps. The last two layers were a global average pooling layer which converts the feature maps into a vector and a dense layer mapping the vector to a 16-dimensional embedding. A relatively simple encoder is used since the input images are low-resolution and contain features such as curves and strokes that the network can learn from these images.
 
-In the Siamese model, pairs of images are supplied to the encoder to produce their embeddings and then the Euclidean distance between each pair is calculated. The model was compiled using the Adam optimiser and used the above contrastive loss function which was calculated using the Euclidean distances and a margin of one, and averaged for every batch. Epoch was set to 5 and batch size to 64. 
+### Training
+
+In the Siamese model, pairs of images are supplied to the encoder to produce their embeddings and then the Euclidean distance between each pair is calculated. The model was compiled using the Adam optimiser and used the above contrastive loss function which was calculated using the Euclidean distances and a margin of one, and averaged for every batch. The number of epochs was set to 5 and the batch size to 64. 
 
 ```{r}
 #| label: snn-cache
@@ -149,9 +155,11 @@ best_index <- which.max(threshold_scores) # index for the threshold that maximis
 threshold <- threshold_candidates[best_index] # threshold that maximises the balanced accuracy
 ```
 
-We compared the balanced accuracy for same and different digit pairs from the validation set at different Euclidean distance thresholds, and chose the threshold which maximised the balanced accuracy. The different thresholds tested were all the actual distances between the validation pairs. The selected threshold was `r round(threshold, 2)` giving a validation balanced accuracy of `r round(threshold_scores[best_index]*100, 2)`%. 
+We compared the balanced accuracy for same and different digit pairs from the validation set at different Euclidean distance thresholds, and chose the threshold which maximised the balanced accuracy. The different thresholds tested were all the actual distances between the validation pairs. The selected threshold was `r round(threshold, 2)`, giving a validation balanced accuracy of `r round(threshold_scores[best_index]*100, 2)`%. 
 
-The generalisability of our model was evaluated by predicting on unseen writers' digit image-pairs in the test set and calculating the balanced accuracy. Balanced accuracy was also calculated by digit to assess how performance varied for different digits (@tbl-snn-test-digits) and calculated separately for pairs in the same and different sessions to how session changes affects performance (@tbl-snn-test-sessions). We did not specify how many of each digit to be used nor whether images should be from the same or different sessions when creating pairs of images. Thus, the number of pairs of images of each digit, and whether the pair was from the same session or not were random with ratios related to the proportion images of each digit (1:1:1:1:1; @tbl-snn-test-digits) and the proportion of images in the same and different sessions in the test set (1:4; @tbl-snn-test-sessions). Examples of pairs from the test batch with predicted and true values are shown in @fig-test-results.
+### Writer verification performance
+
+The generalisability of our model was evaluated by predicting on unseen writers' digit image-pairs in the test set and calculating the balanced accuracy. Balanced accuracy was also calculated by digit to assess how performance varied for different digits (@tbl-snn-test-digits) and calculated separately for pairs in the same and different sessions to assess how session changes affect performance (@tbl-snn-test-sessions). We did not specify how many of each digit to use nor whether images should be from the same or different sessions when creating pairs of images. Thus, the number of pairs of images of each digit, and whether the pair was from the same session or not were random with ratios related to the proportion of images of each digit (1:1:1:1:1; @tbl-snn-test-digits) and the proportion of images in the same and different sessions in the test set (1:4; @tbl-snn-test-sessions). Examples of test pairs with predicted and true labels are shown in @fig-test-results.
 
 ```{r}
 #| label: snn-test
